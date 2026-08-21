@@ -1,0 +1,65 @@
+"use client";
+
+import { useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import type { ParsedSeason } from "@/lib/api";
+import { Play } from "lucide-react";
+
+export function SeasonEpisodes({
+  seasons,
+  onPlay,
+}: {
+  seasons: ParsedSeason[];
+  onPlay: (url: string, label: string) => void;
+}) {
+  const [active, setActive] = useState(String(seasons[0]?.season ?? 1));
+  if (seasons.length === 0) {
+    return <p className="text-sm text-muted-foreground">No episodes available.</p>;
+  }
+
+  return (
+    <Tabs value={active} onValueChange={setActive}>
+      <TabsList className="flex w-full justify-start overflow-x-auto">
+        {seasons.map((s) => (
+          <TabsTrigger key={s.season} value={String(s.season)}>
+            Season {s.season}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      {seasons.map((s) => (
+        <TabsContent key={s.season} value={String(s.season)} className="space-y-2 pt-3">
+          <p className="line-clamp-2 text-xs text-muted-foreground">{s.title}</p>
+          <div className="grid gap-2">
+            {s.episodes.map((ep) => (
+              <div
+                key={ep.episode}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3"
+              >
+                <span className="text-sm font-medium">Episode {ep.episode}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {ep.links.map((l, idx) => (
+                    <Button
+                      key={idx}
+                      size="sm"
+                      variant={l.quality === "1080p" ? "default" : "secondary"}
+                      onClick={() => onPlay(l.url, `S${s.season} E${ep.episode} — ${l.quality}`)}
+                      className="h-7 gap-1 text-xs"
+                    >
+                      <Play className="size-3" />
+                      {l.quality}
+                    </Button>
+                  ))}
+                  {ep.links.length === 0 && (
+                    <Badge variant="outline" className="text-xs">No links</Badge>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </TabsContent>
+      ))}
+    </Tabs>
+  );
+}

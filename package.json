@@ -18,6 +18,7 @@
     "lucide-react": "^1.33.0",
     "next": "16.2.6",
     "next-themes": "^0.4.6",
+    "next-video": "^2.8.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "shadcn": "^4.18.0",
