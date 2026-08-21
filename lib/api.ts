@@ -103,10 +103,10 @@ export function parseMovieLinks(links: string | null): ParsedLink[] {
         .split(",")
         .map((p) => p.trim())
         .filter(Boolean)
+      const isQualityLabel = (p: string) => /(?:\d+p\b|\d+p\])/i.test(p)
       const label =
-        parts.find(
-          (p) => p.includes("p ") || p.includes("p]") || p.length > 10
-        ) ??
+        [...parts].reverse().find((p) => isQualityLabel(p)) ??
+        [...parts].reverse().find((p) => p.length > 10) ??
         parts[0] ??
         "Watch"
       const sizeMatch = line.match(/\[([^\]]+)\]/)
