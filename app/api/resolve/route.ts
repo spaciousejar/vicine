@@ -10,6 +10,15 @@ const NEGATIVE_TTL_MS = 180_000
 const FAILED_PAYLOAD = { error: "Could not resolve a playable video URL" }
 
 const NO_STORE = { cache: "no-store" } as RequestInit
+// Upstream hosts (Cloudflare-fronted CDNs, Google) treat bare undici
+// requests from datacenter IPs as bots; browser-like headers reduce
+// challenge rates.
+const BROWSER_HEADERS = {
+  "user-agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+  accept: "*/*",
+  "accept-language": "en-US,en;q=0.9",
+} as HeadersInit
 
 type Token = { ts?: string; sig?: string }
 
@@ -31,6 +40,7 @@ function timedFetch(
 ) {
   return fetch(url, {
     ...NO_STORE,
+    headers: BROWSER_HEADERS,
     ...init,
     signal: AbortSignal.timeout(timeoutMs),
   })
