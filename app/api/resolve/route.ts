@@ -91,7 +91,8 @@ function looksPlayable(
   contentType: string | null,
   contentLength: string | null
 ) {
-  if (status !== 200) return false
+  // 206 = ranged GET answered with real bytes.
+  if (status !== 200 && status !== 206) return false
   if (/^text\/html/i.test(contentType ?? "")) return false
   if (contentLength === "0") return false
   return true
@@ -101,6 +102,23 @@ async function isPlayable(url: string): Promise<boolean> {
   if (!isSafeHopUrl(url)) return false
   try {
     const res = await timedFetch(url, { method: "HEAD", redirect: "follow" })
+    if (
+      looksPlayable(
+        res.status,
+        res.headers.get("content-type"),
+        res.headers.get("content-length")
+      )
+    )
+      return true
+  } catch {}
+  // Some CDNs reject HEAD from datacenter IPs outright but serve ranged
+  // GETs fine — that response is the authoritative playability check.
+  try {
+    const res = await timedFetch(url, {
+      method: "GET",
+      headers: { range: "bytes=0-1023" },
+      redirect: "follow",
+    })
     return looksPlayable(
       res.status,
       res.headers.get("content-type"),
@@ -223,11 +241,18 @@ export async function GET(req: NextRequest) {
     const workerBase = isWorker
       ? `${parsed.protocol}//${host}`
       : `https://quiet-lab-41f9.yolku.workers.dev`
+    // The troprek worker's /api/links hangs indefinitely when called from
+    // Vercel/AWS egress (upstream bot rules); the yolku worker serves the
+    // identical vcloud API and answers fine, so route around it.
+    const effectiveBase =
+      isWorker && host.endsWith("troprek.workers.dev")
+        ? `https://quiet-lab-41f9.yolku.workers.dev`
+        : workerBase
     const vcloudUrl = isVcloud
       ? url
       : (parsed.searchParams.get("vcloud") ?? url)
 
-    const cacheKey = `${workerBase}|${vcloudUrl}`
+    const cacheKey = `${effectiveBase}|${vcloudUrl}`
     // Diagnostics (link audits) set this to bypass both caches so every
     // probe reflects live upstream state instead of a previous verdict.
     const probing = req.headers.get("x-probe") === "1"
@@ -243,15 +268,56 @@ export async function GET(req: NextRequest) {
 
     let title: unknown
     let size: unknown
+    // ?debug=1 attaches per-attempt evidence to the failure payload so
+    // environment-specific breakage (e.g. egress differences) is visible.
+    const debug = req.nextUrl.searchParams.get("debug") === "1"
+
+    // Preferred path: delegate the whole chain to a Cloudflare Worker
+    // (RESOLVE_WORKER_URL). Upstream hosts trust CF egress but hang or
+    // reject serverless-platform egress, so resolution must run there.
+    const remoteBase = process.env.RESOLVE_WORKER_URL
+    if (remoteBase) {
+      try {
+        const remote = await timedFetch(
+          `${remoteBase.replace(/\/+$/, "")}/resolve?url=${encodeURIComponent(url)}${debug ? "&debug=1" : ""}`,
+          undefined,
+          RESOLVE_BUDGET_MS + 2000
+        )
+        const data = (await remote.json()) as {
+          videoUrl?: string
+          title?: unknown
+          size?: unknown
+          error?: string
+          trace?: Record<string, unknown>[]
+        }
+        if (remote.ok && data.videoUrl) {
+          const payload = {
+            videoUrl: data.videoUrl,
+            title: data.title,
+            size: data.size,
+          }
+          cachePut(cacheKey, payload)
+          return NextResponse.json(payload)
+        }
+        if (!probing) {
+          cachePut(cacheKey, FAILED_PAYLOAD, NEGATIVE_TTL_MS)
+        }
+        return NextResponse.json(
+          debug && data.trace
+            ? { ...FAILED_PAYLOAD, via: "worker", trace: data.trace }
+            : FAILED_PAYLOAD,
+          { status: 502 }
+        )
+      } catch {
+        // Worker unreachable — fall through to the legacy local chain.
+      }
+    }
 
     // Tokens can be single-use or short-lived. Each attempt races every
     // server type in parallel and returns the first verified URL. A
     // wall-clock budget keeps worst-case latency bounded instead of
     // stacking full retry rounds.
     const deadline = Date.now() + RESOLVE_BUDGET_MS
-    // ?debug=1 attaches per-attempt evidence to the failure payload so
-    // environment-specific breakage (e.g. egress differences) is visible.
-    const debug = req.nextUrl.searchParams.get("debug") === "1"
     const trace: Record<string, unknown>[] = []
 
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -268,7 +334,7 @@ export async function GET(req: NextRequest) {
       try {
         const t0 = Date.now()
         const linksRes = await timedFetch(
-          `${workerBase}/api/links?vcloud=${encodeURIComponent(vcloudUrl)}`,
+          `${effectiveBase}/api/links?vcloud=${encodeURIComponent(vcloudUrl)}`,
           undefined,
           Math.min(FETCH_TIMEOUT_MS, remaining)
         )
@@ -304,7 +370,9 @@ export async function GET(req: NextRequest) {
         trace.push({ step: "tokens", empty: true })
 
       const chainResults = await Promise.allSettled(
-        types.map((type) => tryType(workerBase, type, vcloudUrl, tokens[type]))
+        types.map((type) =>
+          tryType(effectiveBase, type, vcloudUrl, tokens[type])
+        )
       )
       if (debug)
         chainResults.forEach((r, i) => {
