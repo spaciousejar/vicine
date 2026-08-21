@@ -42,6 +42,13 @@ export function WatchInnerClient({
         ? `S${seasons[0].season} E${seasons[0].episodes[0]?.episode} — ${seasons[0].episodes[0]?.links[0]?.quality}`
         : undefined
   )
+  // Sources that failed to resolve — surfaced as unavailable so users stop
+  // clicking known-dead links.
+  const [failedUrls, setFailedUrls] = useState<string[]>([])
+
+  function markUnresolved(u: string) {
+    setFailedUrls((prev) => (prev.includes(u) ? prev : [...prev, u]))
+  }
 
   function play(u: string, l: string) {
     setUrl(u)
@@ -66,7 +73,11 @@ export function WatchInnerClient({
 
         <div className="grid gap-6 lg:grid-cols-[1.6fr_0.9fr]">
           <div className="space-y-4">
-            <VideoPlayer url={url} label={label} />
+            <VideoPlayer
+              url={url}
+              label={label}
+              onUnresolved={markUnresolved}
+            />
 
             <div className="flex flex-wrap gap-1.5">
               {year && <Badge variant="secondary">{year}</Badge>}
@@ -90,44 +101,53 @@ export function WatchInnerClient({
                       No links available.
                     </p>
                   ) : (
-                    movieLinks.map((l, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between gap-3 rounded-lg border p-3"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {l.label}
-                          </p>
-                          {l.size && (
-                            <p className="text-xs text-muted-foreground">
-                              {l.size}
+                    movieLinks.map((l, i) => {
+                      const failed = failedUrls.includes(l.url)
+                      return (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between gap-3 rounded-lg border p-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {l.label}
                             </p>
-                          )}
+                            <p className="text-xs text-muted-foreground">
+                              {failed ? (
+                                <span className="text-destructive">
+                                  Unavailable
+                                </span>
+                              ) : (
+                                l.size
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant={failed ? "secondary" : "default"}
+                              disabled={failed}
+                              onClick={() =>
+                                play(
+                                  l.url,
+                                  `${l.label}${l.size ? ` • ${l.size}` : ""}`
+                                )
+                              }
+                            >
+                              {failed ? "Dead" : "Play"}
+                            </Button>
+                            <a
+                              href={l.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex h-8 items-center rounded-2xl border bg-background px-3 text-sm hover:bg-muted"
+                            >
+                              Open
+                            </a>
+                          </div>
                         </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              play(
-                                l.url,
-                                `${l.label}${l.size ? ` • ${l.size}` : ""}`
-                              )
-                            }
-                          >
-                            Play
-                          </Button>
-                          <a
-                            href={l.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex h-8 items-center rounded-2xl border bg-background px-3 text-sm hover:bg-muted"
-                          >
-                            Open
-                          </a>
-                        </div>
-                      </div>
-                    ))
+                      )
+                    })
                   )}
                 </CardContent>
               </Card>
@@ -137,7 +157,11 @@ export function WatchInnerClient({
                   <CardTitle className="text-base">Episodes</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <SeasonEpisodes seasons={seasons} onPlay={play} />
+                  <SeasonEpisodes
+                    seasons={seasons}
+                    onPlay={play}
+                    failedUrls={failedUrls}
+                  />
                 </CardContent>
               </Card>
             )}

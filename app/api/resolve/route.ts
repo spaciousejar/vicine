@@ -4,6 +4,10 @@ const WORKER_HOSTS = [".workers.dev"]
 const FETCH_TIMEOUT_MS = 6000
 const RESOLVE_BUDGET_MS = 9000
 const CACHE_TTL_MS = 60_000
+// Failed resolutions are cached briefly: dead links stop being re-probed on
+// every click, while genuinely transient upstream hiccups recover fast.
+const NEGATIVE_TTL_MS = 180_000
+const FAILED_PAYLOAD = { error: "Could not resolve a playable video URL" }
 
 const NO_STORE = { cache: "no-store" } as RequestInit
 
@@ -12,19 +16,23 @@ type Token = { ts?: string; sig?: string }
 const resolveCache = new Map<string, { expires: number; payload: object }>()
 const RESOLVE_CACHE_MAX = 500
 
-function cachePut(key: string, payload: object) {
+function cachePut(key: string, payload: object, ttl = CACHE_TTL_MS) {
   if (resolveCache.size >= RESOLVE_CACHE_MAX) {
     const oldest = resolveCache.keys().next().value
     if (oldest !== undefined) resolveCache.delete(oldest)
   }
-  resolveCache.set(key, { expires: Date.now() + CACHE_TTL_MS, payload })
+  resolveCache.set(key, { expires: Date.now() + ttl, payload })
 }
 
-function timedFetch(url: string, init?: RequestInit) {
+function timedFetch(
+  url: string,
+  init?: RequestInit,
+  timeoutMs: number = FETCH_TIMEOUT_MS
+) {
   return fetch(url, {
     ...NO_STORE,
     ...init,
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   })
 }
 
@@ -210,9 +218,17 @@ export async function GET(req: NextRequest) {
       : (parsed.searchParams.get("vcloud") ?? url)
 
     const cacheKey = `${workerBase}|${vcloudUrl}`
-    const cached = resolveCache.get(cacheKey)
-    if (cached && cached.expires > Date.now()) {
-      return NextResponse.json(cached.payload)
+    // Diagnostics (link audits) set this to bypass both caches so every
+    // probe reflects live upstream state instead of a previous verdict.
+    const probing = req.headers.get("x-probe") === "1"
+    if (!probing) {
+      const cached = resolveCache.get(cacheKey)
+      if (cached && cached.expires > Date.now()) {
+        const isFailure = "error" in cached.payload
+        return NextResponse.json(cached.payload, {
+          status: isFailure ? 502 : 200,
+        })
+      }
     }
 
     let title: unknown
@@ -225,15 +241,28 @@ export async function GET(req: NextRequest) {
     const deadline = Date.now() + RESOLVE_BUDGET_MS
 
     for (let attempt = 0; attempt < 3; attempt++) {
-      const linksRes = await timedFetch(
-        `${workerBase}/api/links?vcloud=${encodeURIComponent(vcloudUrl)}`
-      )
-      if (!linksRes.ok)
-        return NextResponse.json(
-          { error: "Failed to get links" },
-          { status: 502 }
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) break
+
+      // The links endpoint can hang or hiccup on dead ids; treat any
+      // per-attempt failure as retryable instead of letting it escape.
+      let linksData: {
+        title?: unknown
+        size?: unknown
+        tokens?: Record<string, Token>
+      }
+      try {
+        const linksRes = await timedFetch(
+          `${workerBase}/api/links?vcloud=${encodeURIComponent(vcloudUrl)}`,
+          undefined,
+          Math.min(FETCH_TIMEOUT_MS, remaining)
         )
-      const linksData = await linksRes.json()
+        if (!linksRes.ok) continue
+        linksData = await linksRes.json()
+      } catch {
+        continue
+      }
+
       title = linksData.title
       size = linksData.size
 
@@ -241,9 +270,6 @@ export async function GET(req: NextRequest) {
       const types = Object.keys(tokens).filter(
         (t) => tokens[t]?.ts && tokens[t]?.sig
       )
-
-      const remaining = deadline - Date.now()
-      if (remaining <= 0) break
 
       const payload = await Promise.any(
         types.map((type) => tryType(workerBase, type, vcloudUrl, tokens[type]))
@@ -259,10 +285,10 @@ export async function GET(req: NextRequest) {
       if (Date.now() >= deadline) break
     }
 
-    return NextResponse.json(
-      { error: "Could not resolve a playable video URL" },
-      { status: 502 }
-    )
+    // Negative-cache so repeat clicks on a dead link fail fast instead of
+    // re-running the full chain for the next few minutes.
+    cachePut(cacheKey, FAILED_PAYLOAD, NEGATIVE_TTL_MS)
+    return NextResponse.json(FAILED_PAYLOAD, { status: 502 })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

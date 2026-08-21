@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import Player from "next-video/player"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,9 +11,13 @@ const HLS_EXT = /\.m3u8($|\?)/i
 export function VideoPlayer({
   url,
   label,
+  onUnresolved,
 }: {
   url: string | null
   label?: string
+  // Fired when resolution ultimately fails for this url (after retries) so
+  // parents can mark the source as unavailable.
+  onUnresolved?: (url: string) => void
 }) {
   const [copied, setCopied] = useState(false)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
@@ -23,6 +27,12 @@ export function VideoPlayer({
   const [useHlsProxy, setUseHlsProxy] = useState(false)
 
   const [prevUrl, setPrevUrl] = useState(url)
+  // Keep the latest callback in a ref so the resolve effect doesn't re-run
+  // when parents pass a fresh inline function each render.
+  const onUnresolvedRef = useRef(onUnresolved)
+  useEffect(() => {
+    onUnresolvedRef.current = onUnresolved
+  })
   if (url !== prevUrl) {
     setPrevUrl(url)
     setVideoUrl(null)
@@ -36,23 +46,34 @@ export function VideoPlayer({
     if (!url) return
     let cancelled = false
 
-    fetch(`/api/resolve?url=${encodeURIComponent(url)}`)
-      .then((r) => r.json())
-      .then((data) => {
+    // Resolved links can be transient (single-use tokens, upstream blips),
+    // so give the first failure one quiet retry before surfacing it.
+    async function resolve(triesLeft: number) {
+      try {
+        const r = await fetch(`/api/resolve?url=${encodeURIComponent(url!)}`)
+        const data = await r.json()
         if (cancelled) return
         if (data.videoUrl) {
           setVideoUrl(data.videoUrl)
-        } else {
-          setError(true)
-        }
-        setResolving(false)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setError(true)
           setResolving(false)
+          return
         }
-      })
+        throw new Error("no videoUrl")
+      } catch {
+        if (cancelled) return
+        if (triesLeft > 0) {
+          setTimeout(() => {
+            if (!cancelled) resolve(triesLeft - 1)
+          }, 1200)
+          return
+        }
+        setError(true)
+        setResolving(false)
+        onUnresolvedRef.current?.(url!)
+      }
+    }
+
+    resolve(1)
 
     return () => {
       cancelled = true

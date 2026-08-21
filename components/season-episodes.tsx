@@ -10,9 +10,12 @@ import { Play } from "lucide-react"
 export function SeasonEpisodes({
   seasons,
   onPlay,
+  failedUrls = [],
 }: {
   seasons: ParsedSeason[]
   onPlay: (url: string, label: string) => void
+  // URLs that already failed to resolve — their quality buttons render dead.
+  failedUrls?: string[]
 }) {
   const [active, setActive] = useState(String(seasons[0]?.season ?? 1))
   if (seasons.length === 0) {
@@ -49,23 +52,31 @@ export function SeasonEpisodes({
                   Episode {ep.episode}
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {ep.links.map((l, idx) => (
-                    <Button
-                      key={idx}
-                      size="sm"
-                      variant={l.quality === "1080p" ? "default" : "secondary"}
-                      onClick={() =>
-                        onPlay(
-                          l.url,
-                          `S${s.season} E${ep.episode} — ${l.quality}`
-                        )
-                      }
-                      className="h-7 gap-1 text-xs"
-                    >
-                      <Play className="size-3" />
-                      {l.quality}
-                    </Button>
-                  ))}
+                  {ep.links.map((l, idx) => {
+                    const failed = failedUrls.includes(l.url)
+                    return (
+                      <Button
+                        key={idx}
+                        size="sm"
+                        variant={
+                          failed || l.quality !== "1080p"
+                            ? "secondary"
+                            : "default"
+                        }
+                        disabled={failed}
+                        onClick={() =>
+                          onPlay(
+                            l.url,
+                            `S${s.season} E${ep.episode} — ${l.quality}`
+                          )
+                        }
+                        className="h-7 gap-1 text-xs"
+                      >
+                        <Play className="size-3" />
+                        {l.quality}
+                      </Button>
+                    )
+                  })}
                   {ep.links.length === 0 && (
                     <Badge variant="outline" className="text-xs">
                       No links
