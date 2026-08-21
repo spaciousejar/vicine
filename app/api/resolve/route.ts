@@ -98,19 +98,29 @@ function looksPlayable(
   return true
 }
 
-async function isPlayable(url: string): Promise<boolean> {
+async function isPlayable(
+  url: string,
+  trace?: Record<string, unknown>[]
+): Promise<boolean> {
   if (!isSafeHopUrl(url)) return false
+  const probe: Record<string, unknown> = { candidate: url.slice(0, 90) }
   try {
     const res = await timedFetch(url, { method: "HEAD", redirect: "follow" })
+    probe.headStatus = res.status
+    probe.headCt = res.headers.get("content-type")
     if (
       looksPlayable(
         res.status,
         res.headers.get("content-type"),
         res.headers.get("content-length")
       )
-    )
+    ) {
+      trace?.push({ ...probe, verdict: "head-ok" })
       return true
-  } catch {}
+    }
+  } catch (e) {
+    probe.headErr = String(e).slice(0, 90)
+  }
   // Some CDNs reject HEAD from datacenter IPs outright but serve ranged
   // GETs fine — that response is the authoritative playability check.
   try {
@@ -119,12 +129,21 @@ async function isPlayable(url: string): Promise<boolean> {
       headers: { range: "bytes=0-1023" },
       redirect: "follow",
     })
-    return looksPlayable(
+    probe.getStatus = res.status
+    probe.getCt = res.headers.get("content-type")
+    const ok = looksPlayable(
       res.status,
       res.headers.get("content-type"),
       res.headers.get("content-length")
     )
-  } catch {
+    trace?.push({ ...probe, verdict: ok ? "get-ok" : "get-reject" })
+    return ok
+  } catch (e) {
+    trace?.push({
+      ...probe,
+      getErr: String(e).slice(0, 90),
+      verdict: "get-err",
+    })
     return false
   }
 }
@@ -207,11 +226,12 @@ async function tryType(
   workerBase: string,
   type: string,
   vcloudUrl: string,
-  token: Token
+  token: Token,
+  trace?: Record<string, unknown>[]
 ): Promise<string> {
   const result = await followChain(workerBase, type, vcloudUrl, token)
   if (!result) throw new Error(`chain failed for ${type}`)
-  if (!result.verified && !(await isPlayable(result.url))) {
+  if (!result.verified && !(await isPlayable(result.url, trace))) {
     throw new Error(`unplayable candidate for ${type}`)
   }
   return result.url
@@ -371,7 +391,7 @@ export async function GET(req: NextRequest) {
 
       const chainResults = await Promise.allSettled(
         types.map((type) =>
-          tryType(effectiveBase, type, vcloudUrl, tokens[type])
+          tryType(effectiveBase, type, vcloudUrl, tokens[type], trace)
         )
       )
       if (debug)
