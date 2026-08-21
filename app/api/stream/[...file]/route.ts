@@ -10,6 +10,7 @@ import os from "node:os"
 const STREAM_ROOT = path.join(os.tmpdir(), "vicine-streams")
 const IDLE_KILL_MS = 10 * 60_000
 const SEGMENT_WAIT_MS = 15_000
+const PLAYLIST_WAIT_MS = 45_000
 
 type StreamJob = {
   dir: string
@@ -112,15 +113,20 @@ async function ensureJob(
   return job
 }
 
-async function waitForFile(file: string, timeoutMs: number): Promise<boolean> {
+async function waitForFile(
+  file: string,
+  timeoutMs: number,
+  proc?: ChildProcess | null
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
       await fs.access(file)
       return true
-    } catch {
-      await new Promise((r) => setTimeout(r, 250))
-    }
+    } catch {}
+    // Don't burn the whole budget if ffmpeg already died.
+    if (proc && proc.exitCode !== null && !existsSync(file)) return false
+    await new Promise((r) => setTimeout(r, 250))
   }
   return existsSync(file)
 }
@@ -193,7 +199,7 @@ export async function GET(
     }
 
     const playlistFile = path.join(job.dir, "index.m3u8")
-    const ok = await waitForFile(playlistFile, SEGMENT_WAIT_MS)
+    const ok = await waitForFile(playlistFile, PLAYLIST_WAIT_MS, job.proc)
     if (!ok) {
       return NextResponse.json(
         { error: "Transcode did not start" },
@@ -223,7 +229,8 @@ export async function GET(
   }
 
   const segPath = path.join(STREAM_ROOT, hash, path.basename(name))
-  const ok = await waitForFile(segPath, SEGMENT_WAIT_MS)
+  const job = jobs.get(hash)
+  const ok = await waitForFile(segPath, SEGMENT_WAIT_MS, job?.proc)
   if (!ok) {
     return NextResponse.json({ error: "Segment not ready" }, { status: 404 })
   }

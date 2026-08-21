@@ -71,8 +71,8 @@ export function VideoPlayer({
 
   function handlePlayerError() {
     if (!useHlsProxy && videoUrl && !HLS_EXT.test(videoUrl)) {
-      setVideoUrl(null)
-      setResolving(true)
+      // Keep videoUrl: playSrc recomputes to the proxy URL and the key
+      // change remounts the player in HLS mode immediately.
       setUseHlsProxy(true)
       return
     }
