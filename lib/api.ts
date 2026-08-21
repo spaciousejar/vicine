@@ -236,6 +236,23 @@ export async function fetchBySlug(
   return null
 }
 
+export async function searchContent(q: string): Promise<MediaItem[]> {
+  const encoded = encodeURIComponent(q.trim()).replace(/%20/g, "+")
+  const res = await fetch(`${BASE_URL}/api/search/${encoded}`, {
+    next: { revalidate: 120 },
+  })
+  if (!res.ok) return []
+  const data = await res.json()
+  const arr: unknown[] = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.data)
+      ? data.data
+      : []
+  return arr.filter((d): d is MediaItem =>
+    Boolean(d && (d as MediaItem).url_slug)
+  )
+}
+
 export function getContentTypeLabel(type: ContentType): string {
   return type === "movies" ? "Movies" : type === "anime" ? "Anime" : "Series"
 }

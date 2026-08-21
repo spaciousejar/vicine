@@ -1,8 +1,8 @@
-import { MediaGrid } from "@/components/media-grid";
-import { AppPagination } from "@/components/pagination";
-import { CategoryFilter } from "@/components/category-filter";
-import { SiteHeader } from "@/components/site-header";
-import type { ContentType } from "@/lib/api";
+import { MediaGrid } from "@/components/media-grid"
+import { AppPagination } from "@/components/pagination"
+import { CategoryFilter } from "@/components/category-filter"
+import { SiteHeader } from "@/components/site-header"
+import type { ContentType } from "@/lib/api"
 
 export function ListingShell({
   title,
@@ -14,23 +14,15 @@ export function ListingShell({
   total,
   q,
 }: {
-  title: string;
-  description: string;
-  items: import("@/lib/api").MediaItem[];
-  type: ContentType;
-  page: number;
-  pages: number;
-  total: number;
-  q: string;
+  title: string
+  description: string
+  items: import("@/lib/api").MediaItem[]
+  type: ContentType
+  page: number
+  pages: number
+  total: number
+  q: string
 }) {
-  const filtered = q
-    ? items.filter(
-        (i) =>
-          i.title.toLowerCase().includes(q.toLowerCase()) ||
-          (i.categories ?? "").toLowerCase().includes(q.toLowerCase())
-      )
-    : items;
-
   return (
     <div className="min-h-svh bg-background">
       <SiteHeader />
@@ -43,13 +35,17 @@ export function ListingShell({
           <CategoryFilter />
           {q && (
             <p className="text-xs text-muted-foreground">
-              Filtered by <span className="font-medium text-foreground">&quot;{q}&quot;</span> — showing {filtered.length} of {items.length} on this page
+              Search results for{" "}
+              <span className="font-medium text-foreground">
+                &quot;{q}&quot;
+              </span>{" "}
+              — {items.length} {items.length === 1 ? "title" : "titles"}
             </p>
           )}
         </div>
-        <MediaGrid items={filtered} type={type} />
-        <AppPagination page={page} pages={pages} total={total} />
+        <MediaGrid items={items} type={type} />
+        {!q && <AppPagination page={page} pages={pages} total={total} />}
       </main>
     </div>
-  );
+  )
 }
