@@ -108,10 +108,16 @@ async function followChain(workerBase, type, vcloudUrl, token, trace) {
 
     let hopRes
     try {
+      // hubcloud-class hosts 403 bare HEAD probes (even from CF egress) but
+      // answer normal GETs; use GET with manual redirects as the probe and
+      // discard the body immediately.
       hopRes = await timedFetch(currentUrl, {
-        method: "HEAD",
+        method: "GET",
         redirect: "manual",
       })
+      try {
+        await hopRes.body?.cancel()
+      } catch {}
     } catch (e) {
       trace?.push({ step: `hop:${i}`, error: String(e).slice(0, 120) })
       break
