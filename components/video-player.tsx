@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Player from "next-video/player"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ExternalLink, Play, Copy, Check, Loader2 } from "lucide-react"
+
+const HLS_EXT = /\.m3u8($|\?)/i
 
 export function VideoPlayer({
   url,
@@ -18,6 +20,7 @@ export function VideoPlayer({
   const [resolving, setResolving] = useState(Boolean(url))
   const [error, setError] = useState(false)
   const [resolveAttempt, setResolveAttempt] = useState(0)
+  const [useHlsProxy, setUseHlsProxy] = useState(false)
 
   const [prevUrl, setPrevUrl] = useState(url)
   if (url !== prevUrl) {
@@ -26,6 +29,7 @@ export function VideoPlayer({
     setError(false)
     setResolving(Boolean(url))
     setResolveAttempt(0)
+    setUseHlsProxy(false)
   }
 
   useEffect(() => {
@@ -55,9 +59,25 @@ export function VideoPlayer({
     }
   }, [url, resolveAttempt])
 
-  // Resolved links can be short-lived or single-use; retry with a fresh
-  // resolution before giving up.
+  // Firefox/Safari cannot demux MKV natively while Chrome tolerates it.
+  // Route non-HLS sources through the server-side transmux proxy when the
+  // browser reports a playback error on the direct file.
+  const playSrc = useMemo(() => {
+    if (!videoUrl) return null
+    if (HLS_EXT.test(videoUrl)) return videoUrl
+    if (!useHlsProxy) return videoUrl
+    return `/api/stream/direct/index.m3u8?url=${encodeURIComponent(videoUrl)}`
+  }, [videoUrl, useHlsProxy])
+
   function handlePlayerError() {
+    if (!useHlsProxy && videoUrl && !HLS_EXT.test(videoUrl)) {
+      setVideoUrl(null)
+      setResolving(true)
+      setUseHlsProxy(true)
+      return
+    }
+    // Resolved links can be short-lived or single-use; retry with a fresh
+    // resolution before giving up.
     if (resolveAttempt >= 2) {
       setError(true)
       return
@@ -87,10 +107,10 @@ export function VideoPlayer({
               </p>
             </div>
           )}
-          {videoUrl && (
+          {playSrc && (
             <Player
-              key={videoUrl}
-              src={videoUrl}
+              key={playSrc}
+              src={playSrc}
               autoPlay
               controls
               crossOrigin={undefined}
