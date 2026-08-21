@@ -10,6 +10,15 @@ const NO_STORE = { cache: "no-store" } as RequestInit
 type Token = { ts?: string; sig?: string }
 
 const resolveCache = new Map<string, { expires: number; payload: object }>()
+const RESOLVE_CACHE_MAX = 500
+
+function cachePut(key: string, payload: object) {
+  if (resolveCache.size >= RESOLVE_CACHE_MAX) {
+    const oldest = resolveCache.keys().next().value
+    if (oldest !== undefined) resolveCache.delete(oldest)
+  }
+  resolveCache.set(key, { expires: Date.now() + CACHE_TTL_MS, payload })
+}
 
 function timedFetch(url: string, init?: RequestInit) {
   return fetch(url, {
@@ -243,10 +252,7 @@ export async function GET(req: NextRequest) {
         .catch(() => null)
 
       if (payload) {
-        resolveCache.set(cacheKey, {
-          expires: Date.now() + CACHE_TTL_MS,
-          payload,
-        })
+        cachePut(cacheKey, payload)
         return NextResponse.json(payload)
       }
 
