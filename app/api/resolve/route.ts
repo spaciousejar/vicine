@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 const WORKER_HOSTS = [".workers.dev"]
 const FETCH_TIMEOUT_MS = 6000
+const RESOLVE_BUDGET_MS = 9000
 const CACHE_TTL_MS = 60_000
 
 const NO_STORE = { cache: "no-store" } as RequestInit
@@ -209,7 +210,11 @@ export async function GET(req: NextRequest) {
     let size: unknown
 
     // Tokens can be single-use or short-lived. Each attempt races every
-    // server type in parallel and returns the first verified URL.
+    // server type in parallel and returns the first verified URL. A
+    // wall-clock budget keeps worst-case latency bounded instead of
+    // stacking full retry rounds.
+    const deadline = Date.now() + RESOLVE_BUDGET_MS
+
     for (let attempt = 0; attempt < 3; attempt++) {
       const linksRes = await timedFetch(
         `${workerBase}/api/links?vcloud=${encodeURIComponent(vcloudUrl)}`
@@ -228,6 +233,9 @@ export async function GET(req: NextRequest) {
         (t) => tokens[t]?.ts && tokens[t]?.sig
       )
 
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) break
+
       const payload = await Promise.any(
         types.map((type) => tryType(workerBase, type, vcloudUrl, tokens[type]))
       )
@@ -241,6 +249,8 @@ export async function GET(req: NextRequest) {
         })
         return NextResponse.json(payload)
       }
+
+      if (Date.now() >= deadline) break
     }
 
     return NextResponse.json(
