@@ -46,19 +46,19 @@ async function ensureJob(
   hash: string,
   sourceUrl: string
 ): Promise<StreamJob | null> {
-  let job = jobs.get(hash)
-  if (job) {
-    job.lastAccess = Date.now()
-    if (
-      job.proc &&
-      job.proc.exitCode !== null &&
-      !existsSync(path.join(job.dir, "index.m3u8"))
-    ) {
-      // Previous process died before producing anything — retry once.
-      job = undefined
-    } else {
-      return job
+  const existing = jobs.get(hash)
+  if (existing) {
+    existing.lastAccess = Date.now()
+    if (existsSync(path.join(existing.dir, "index.m3u8"))) {
+      return existing
     }
+    // Output directory vanished or the process died before producing a
+    // playlist — tear it down and start over.
+    if (existing.proc && existing.proc.exitCode === null) {
+      existing.proc.kill("SIGKILL")
+    }
+    jobs.delete(hash)
+    await fs.rm(existing.dir, { recursive: true, force: true }).catch(() => {})
   }
 
   await fs.mkdir(STREAM_ROOT, { recursive: true })
@@ -102,7 +102,7 @@ async function ensureJob(
     return null
   }
 
-  job = { dir, proc, lastAccess: Date.now() }
+  const job: StreamJob = { dir, proc, lastAccess: Date.now() }
   jobs.set(hash, job)
 
   proc.on("exit", () => {
@@ -201,12 +201,14 @@ export async function GET(
       )
     }
 
-    // Rewrite segment URIs to include the job's real hash so the playlist
-    // resolves correctly no matter which path it was requested from.
-    const body = (await fs.readFile(playlistFile, "utf8")).replace(
-      /\bseg_(\d+\.ts)\b/g,
-      `${realHash}/seg_$1`
-    )
+    // Rewrite segment URIs to absolute paths carrying the job's real hash
+    // so they resolve correctly no matter which path the playlist was
+    // requested from. Declare VOD explicitly: until ffmpeg writes
+    // EXT-X-ENDLIST, hls.js would otherwise treat this as a live stream
+    // and start playback at the newest (near-end) segment.
+    const body = (await fs.readFile(playlistFile, "utf8"))
+      .replace("#EXTM3U", "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD")
+      .replace(/\bseg_(\d+\.ts)\b/g, `/api/stream/${realHash}/seg_$1`)
     return new NextResponse(body, {
       headers: {
         "Content-Type": "application/vnd.apple.mpegurl",
