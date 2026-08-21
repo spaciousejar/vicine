@@ -239,6 +239,10 @@ export async function GET(req: NextRequest) {
     // wall-clock budget keeps worst-case latency bounded instead of
     // stacking full retry rounds.
     const deadline = Date.now() + RESOLVE_BUDGET_MS
+    // ?debug=1 attaches per-attempt evidence to the failure payload so
+    // environment-specific breakage (e.g. egress differences) is visible.
+    const debug = req.nextUrl.searchParams.get("debug") === "1"
+    const trace: Record<string, unknown>[] = []
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const remaining = deadline - Date.now()
@@ -252,14 +256,30 @@ export async function GET(req: NextRequest) {
         tokens?: Record<string, Token>
       }
       try {
+        const t0 = Date.now()
         const linksRes = await timedFetch(
           `${workerBase}/api/links?vcloud=${encodeURIComponent(vcloudUrl)}`,
           undefined,
           Math.min(FETCH_TIMEOUT_MS, remaining)
         )
-        if (!linksRes.ok) continue
+        if (!linksRes.ok) {
+          if (debug)
+            trace.push({
+              step: "links",
+              status: linksRes.status,
+              ct: linksRes.headers.get("content-type"),
+              ms: Date.now() - t0,
+            })
+          continue
+        }
         linksData = await linksRes.json()
-      } catch {
+      } catch (e) {
+        if (debug)
+          trace.push({
+            step: "links",
+            error: String(e).slice(0, 120),
+            ms: Date.now() - (deadline - RESOLVE_BUDGET_MS),
+          })
         continue
       }
 
@@ -270,14 +290,28 @@ export async function GET(req: NextRequest) {
       const types = Object.keys(tokens).filter(
         (t) => tokens[t]?.ts && tokens[t]?.sig
       )
+      if (debug && types.length === 0)
+        trace.push({ step: "tokens", empty: true })
 
-      const payload = await Promise.any(
+      const chainResults = await Promise.allSettled(
         types.map((type) => tryType(workerBase, type, vcloudUrl, tokens[type]))
       )
-        .then((videoUrl) => ({ videoUrl, title, size }))
-        .catch(() => null)
+      if (debug)
+        chainResults.forEach((r, i) => {
+          if (r.status === "rejected")
+            trace.push({
+              step: `chain:${types[i]}`,
+              error: String(r.reason).slice(0, 140),
+            })
+        })
+      const winner = chainResults.find((r) => r.status === "fulfilled")
 
-      if (payload) {
+      if (winner) {
+        const payload = {
+          videoUrl: (winner as PromiseFulfilledResult<string>).value,
+          title,
+          size,
+        }
         cachePut(cacheKey, payload)
         return NextResponse.json(payload)
       }
@@ -288,7 +322,10 @@ export async function GET(req: NextRequest) {
     // Negative-cache so repeat clicks on a dead link fail fast instead of
     // re-running the full chain for the next few minutes.
     cachePut(cacheKey, FAILED_PAYLOAD, NEGATIVE_TTL_MS)
-    return NextResponse.json(FAILED_PAYLOAD, { status: 502 })
+    return NextResponse.json(
+      debug ? { ...FAILED_PAYLOAD, trace } : FAILED_PAYLOAD,
+      { status: 502 }
+    )
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
