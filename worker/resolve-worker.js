@@ -166,19 +166,29 @@ export default {
 
       const trace = debug ? [] : undefined
 
+      // Both known resolver workers serve identical vcloud APIs; some
+      // vantage points get tokenless answers from one but not the other.
+      const bases = [
+        workerBase,
+        workerBase.includes("yolku")
+          ? "https://small-union-7439.troprek.workers.dev"
+          : "https://quiet-lab-41f9.yolku.workers.dev",
+      ].filter((b, i, a) => a.indexOf(b) === i)
+
       for (let attempt = 0; attempt < 3; attempt++) {
+        const base = bases[attempt % bases.length]
         let linksData
         try {
           const res = await timedFetch(
-            `${workerBase}/api/links?vcloud=${encodeURIComponent(vcloudUrl)}`
+            `${base}/api/links?vcloud=${encodeURIComponent(vcloudUrl)}`
           )
           if (!res.ok) {
-            trace?.push({ step: "links", status: res.status })
+            trace?.push({ step: "links", base, status: res.status })
             continue
           }
           linksData = await res.json()
         } catch (e) {
-          trace?.push({ step: "links", error: String(e).slice(0, 120) })
+          trace?.push({ step: "links", base, error: String(e).slice(0, 140) })
           continue
         }
 
@@ -186,11 +196,19 @@ export default {
         const types = Object.keys(tokens).filter(
           (t) => tokens[t]?.ts && tokens[t]?.sig
         )
+        if (debug)
+          trace?.push({
+            step: "links-ok",
+            base,
+            typeKeys: Object.keys(tokens),
+            usableTypes: types,
+            bodyHead: JSON.stringify(linksData).slice(0, 200),
+          })
 
         const results = await Promise.allSettled(
           types.map(async (type) => {
             const r = await followChain(
-              workerBase,
+              base,
               type,
               vcloudUrl,
               tokens[type],
@@ -209,6 +227,13 @@ export default {
             title: linksData.title,
             size: linksData.size,
           })
+        results.forEach((r, i) => {
+          if (r.status === "rejected")
+            trace?.push({
+              step: `chain:${types[i]}`,
+              error: String(r.reason).slice(0, 140),
+            })
+        })
 
         if (debug) trace?.push({ step: "attempt", done: attempt + 1 })
       }
