@@ -1,33 +1,52 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import Link from "next/link";
-import { SiteHeader } from "@/components/site-header";
-import { VideoPlayer } from "@/components/video-player";
-import { SeasonEpisodes } from "@/components/season-episodes";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
-import { getCategories, getImage, getSeasons, getYear, parseMovieLinks } from "@/lib/api";
-import type { ContentType, MediaItem } from "@/lib/api";
+import { useState } from "react"
+import Link from "next/link"
+import Image from "next/image"
+import { SiteHeader } from "@/components/site-header"
+import { VideoPlayer } from "@/components/video-player"
+import { SeasonEpisodes } from "@/components/season-episodes"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
+import { Button } from "@/components/ui/button"
+import {
+  getCategories,
+  getImage,
+  getSeasons,
+  getYear,
+  parseMovieLinks,
+} from "@/lib/api"
+import type { ContentType, MediaItem } from "@/lib/api"
 
-export function WatchInnerClient({ item, type }: { item: MediaItem; type: ContentType }) {
-  const img = getImage(item);
-  const cats = getCategories(item);
-  const year = getYear(item);
-  const seasons = getSeasons(item);
-  const movieLinks = type === "movies" ? parseMovieLinks(item.links) : [];
+export function WatchInnerClient({
+  item,
+  type,
+}: {
+  item: MediaItem
+  type: ContentType
+}) {
+  const img = getImage(item)
+  const cats = getCategories(item)
+  const year = getYear(item)
+  const seasons = getSeasons(item)
+  const movieLinks = type === "movies" ? parseMovieLinks(item.links) : []
 
-  const [url, setUrl] = useState<string | null>(movieLinks[0]?.url ?? seasons[0]?.episodes[0]?.links[0]?.url ?? null);
+  const [url, setUrl] = useState<string | null>(
+    movieLinks[0]?.url ?? seasons[0]?.episodes[0]?.links[0]?.url ?? null
+  )
   const [label, setLabel] = useState<string | undefined>(
-    movieLinks[0] ? `${movieLinks[0].label}${movieLinks[0].size ? ` • ${movieLinks[0].size}` : ""}` : seasons[0] ? `S${seasons[0].season} E${seasons[0].episodes[0]?.episode} — ${seasons[0].episodes[0]?.links[0]?.quality}` : undefined
-  );
+    movieLinks[0]
+      ? `${movieLinks[0].label}${movieLinks[0].size ? ` • ${movieLinks[0].size}` : ""}`
+      : seasons[0]
+        ? `S${seasons[0].season} E${seasons[0].episodes[0]?.episode} — ${seasons[0].episodes[0]?.links[0]?.quality}`
+        : undefined
+  )
 
   function play(u: string, l: string) {
-    setUrl(u);
-    setLabel(l);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setUrl(u)
+    setLabel(l)
+    window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   return (
@@ -35,7 +54,10 @@ export function WatchInnerClient({ item, type }: { item: MediaItem; type: Conten
       <SiteHeader />
       <main className="mx-auto max-w-7xl px-4 py-6">
         <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
-          <Link href={`/${type}`} className="text-muted-foreground hover:text-foreground">
+          <Link
+            href={`/${type}`}
+            className="text-muted-foreground hover:text-foreground"
+          >
             ← Back to {type}
           </Link>
           <span className="text-muted-foreground">/</span>
@@ -58,20 +80,41 @@ export function WatchInnerClient({ item, type }: { item: MediaItem; type: Conten
             {type === "movies" ? (
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Available qualities</CardTitle>
+                  <CardTitle className="text-base">
+                    Available qualities
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {movieLinks.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No links available.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No links available.
+                    </p>
                   ) : (
                     movieLinks.map((l, i) => (
-                      <div key={i} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                      <div
+                        key={i}
+                        className="flex items-center justify-between gap-3 rounded-lg border p-3"
+                      >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{l.label}</p>
-                          {l.size && <p className="text-xs text-muted-foreground">{l.size}</p>}
+                          <p className="truncate text-sm font-medium">
+                            {l.label}
+                          </p>
+                          {l.size && (
+                            <p className="text-xs text-muted-foreground">
+                              {l.size}
+                            </p>
+                          )}
                         </div>
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => play(l.url, `${l.label}${l.size ? ` • ${l.size}` : ""}`)}>
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              play(
+                                l.url,
+                                `${l.label}${l.size ? ` • ${l.size}` : ""}`
+                              )
+                            }
+                          >
                             Play
                           </Button>
                           <a
@@ -102,27 +145,45 @@ export function WatchInnerClient({ item, type }: { item: MediaItem; type: Conten
 
           <div className="space-y-4">
             <Card className="overflow-hidden py-0">
-              <div className="aspect-[2/3] overflow-hidden bg-muted">
+              <div className="relative aspect-[2/3] overflow-hidden bg-muted">
                 {img ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={img} alt={item.title} className="h-full w-full object-cover" />
+                  <Image
+                    src={img}
+                    alt={item.title}
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 33vw"
+                    className="object-cover"
+                  />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No image</div>
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    No image
+                  </div>
                 )}
               </div>
               <CardContent className="space-y-3 p-4">
-                <h1 className="text-lg font-semibold leading-tight">{item.title}</h1>
-                {item.excerpt && <p className="text-sm text-muted-foreground">{item.excerpt}</p>}
+                <h1 className="text-lg leading-tight font-semibold">
+                  {item.title}
+                </h1>
+                {item.excerpt && (
+                  <p className="text-sm text-muted-foreground">
+                    {item.excerpt}
+                  </p>
+                )}
                 <Separator />
                 <div className="space-y-1 text-xs text-muted-foreground">
                   <p>
-                    <span className="font-medium text-foreground">Slug:</span> {item.url_slug}
+                    <span className="font-medium text-foreground">Slug:</span>{" "}
+                    {item.url_slug}
                   </p>
                   <p>
-                    <span className="font-medium text-foreground">Updated:</span> {new Date(item.modified_date).toLocaleDateString()}
+                    <span className="font-medium text-foreground">
+                      Updated:
+                    </span>{" "}
+                    {new Date(item.modified_date).toLocaleDateString()}
                   </p>
                   <p>
-                    <span className="font-medium text-foreground">Status:</span> {item.status}
+                    <span className="font-medium text-foreground">Status:</span>{" "}
+                    {item.status}
                   </p>
                 </div>
               </CardContent>
@@ -131,5 +192,5 @@ export function WatchInnerClient({ item, type }: { item: MediaItem; type: Conten
         </div>
       </main>
     </div>
-  );
+  )
 }
