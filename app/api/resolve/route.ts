@@ -18,6 +18,46 @@ function timedFetch(url: string, init?: RequestInit) {
   })
 }
 
+// Redirect targets are attacker-influenceable, so never let the chain point
+// at loopback/private/link-local addresses (SSRF protection).
+const BLOCKED_HOST_PATTERNS = [/^localhost$/i, /\.local$/i, /\.internal$/i]
+
+function isPrivateIp(hostname: string): boolean {
+  if (!/^[0-9.:]+$/.test(hostname)) return false
+  if (
+    hostname === "::1" ||
+    hostname === "[::1]" ||
+    hostname.startsWith("fc") ||
+    hostname.startsWith("fd") ||
+    hostname.startsWith("fe8")
+  ) {
+    return true
+  }
+  const parts = hostname.split(".").map((p) => parseInt(p, 10))
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p))) return true
+  const [a, b] = parts
+  if (a === 0 || a === 10 || a === 127) return true
+  if (a === 169 && b === 254) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  if (a >= 224) return true
+  return false
+}
+
+function isSafeHopUrl(url: string): boolean {
+  try {
+    const u = new URL(url)
+    if (u.protocol !== "https:" && u.protocol !== "http:") return false
+    if (u.username || u.password) return false
+    const host = u.hostname.replace(/^\[|\]$/g, "")
+    if (BLOCKED_HOST_PATTERNS.some((re) => re.test(host))) return false
+    if (isPrivateIp(host)) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
 function looksPlayable(
   status: number,
   contentType: string | null,
@@ -30,6 +70,7 @@ function looksPlayable(
 }
 
 async function isPlayable(url: string): Promise<boolean> {
+  if (!isSafeHopUrl(url)) return false
   try {
     const res = await timedFetch(url, { method: "HEAD", redirect: "follow" })
     return looksPlayable(
@@ -70,12 +111,15 @@ async function followChain(
   let contentLength: string | null = goRes.headers.get("content-length")
 
   for (let i = 0; i < 5; i++) {
+    if (!isSafeHopUrl(currentUrl)) return null
+
     try {
       const hopUrl = new URL(currentUrl)
       if (hopUrl.pathname.endsWith("dl.php")) {
         const link = hopUrl.searchParams.get("link")
         // Extracted link hasn't been probed yet — caller must verify.
-        if (link) return { url: link, verified: false }
+        if (link)
+          return isSafeHopUrl(link) ? { url: link, verified: false } : null
       }
     } catch {}
 
@@ -106,6 +150,7 @@ async function followChain(
     }
   }
 
+  if (!isSafeHopUrl(currentUrl)) return null
   return {
     url: currentUrl,
     verified: looksPlayable(status, contentType, contentLength),
