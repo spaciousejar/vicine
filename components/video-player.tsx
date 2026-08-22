@@ -25,6 +25,10 @@ export function VideoPlayer({
   const [error, setError] = useState(false)
   const [resolveAttempt, setResolveAttempt] = useState(0)
   const [useHlsProxy, setUseHlsProxy] = useState(false)
+  // Tokenized /go URLs the browser must traverse itself; walked in order on
+  // playback errors since individual mirror types can be dead.
+  const [goUrls, setGoUrls] = useState<string[]>([])
+  const [goIdx, setGoIdx] = useState(0)
 
   const [prevUrl, setPrevUrl] = useState(url)
   // Keep the latest callback in a ref so the resolve effect doesn't re-run
@@ -40,6 +44,8 @@ export function VideoPlayer({
     setResolving(Boolean(url))
     setResolveAttempt(0)
     setUseHlsProxy(false)
+    setGoUrls([])
+    setGoIdx(0)
   }
 
   useEffect(() => {
@@ -53,11 +59,16 @@ export function VideoPlayer({
         const r = await fetch(`/api/resolve?url=${encodeURIComponent(url!)}`)
         const data = await r.json()
         if (cancelled) return
-        // videoUrl = server-verified direct file. goUrl = tokenized hop URL
-        // the browser itself must traverse (upstreams block datacenter IPs,
-        // so the server cannot follow the chain).
-        const src: string | undefined = data.videoUrl || data.goUrl
+        // videoUrl = server-verified direct file. goUrl(s) = tokenized hop
+        // URLs the browser itself must traverse (upstreams block datacenter
+        // IPs, so the server cannot follow the chain).
+        const list: string[] = Array.isArray(data.goUrls)
+          ? data.goUrls.map((g: { url?: string }) => g.url).filter(Boolean)
+          : []
+        const src: string | undefined = data.videoUrl || data.goUrl || list[0]
         if (src) {
+          setGoUrls(list.length > 0 ? list : src ? [src] : [])
+          setGoIdx(0)
           setVideoUrl(src)
           setResolving(false)
           return
@@ -95,7 +106,16 @@ export function VideoPlayer({
   }, [videoUrl, useHlsProxy])
 
   function handlePlayerError() {
-    if (!useHlsProxy && videoUrl && !HLS_EXT.test(videoUrl)) {
+    const src = playSrc ?? ""
+    // Tokenized /go source failed: try the next mirror type. The transmux
+    // proxy can't handle redirecting tokenized URLs, so skip it here.
+    if (src.includes("/go?")) {
+      if (goIdx < goUrls.length - 1) {
+        setGoIdx(goIdx + 1)
+        setVideoUrl(goUrls[goIdx + 1])
+        return
+      }
+    } else if (!useHlsProxy && videoUrl && !HLS_EXT.test(videoUrl)) {
       // Keep videoUrl: playSrc recomputes to the proxy URL and the key
       // change remounts the player in HLS mode immediately.
       setUseHlsProxy(true)

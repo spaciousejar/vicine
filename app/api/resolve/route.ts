@@ -424,13 +424,20 @@ export async function GET(req: NextRequest) {
       if (linksRes.ok) {
         const data = await linksRes.json()
         const tokens: Record<string, Token> = data.tokens ?? {}
-        const first = Object.entries(tokens).find(([, t]) => t?.ts && t?.sig)
-        if (first && first[1].ts && first[1].sig) {
+        const usable = Object.entries(tokens).filter(
+          ([, t]) => t?.ts && t?.sig
+        ) as [string, Token][]
+        if (usable.length > 0) {
+          const mkGo = ([type, t]: [string, Token]) =>
+            `${effectiveBase}/go?type=${type}` +
+            `&vcloud=${encodeURIComponent(vcloudUrl)}` +
+            `&ts=${t.ts}&sig=${t.sig}`
           const payload = {
-            goUrl:
-              `${effectiveBase}/go?type=${first[0]}` +
-              `&vcloud=${encodeURIComponent(vcloudUrl)}` +
-              `&ts=${first[1].ts}&sig=${first[1].sig}`,
+            goUrl: mkGo(usable[0]),
+            // Some server types (e.g. pixeldrain mirrors) can be dead while
+            // others work — hand every option over so the player can walk
+            // them on playback errors.
+            goUrls: usable.map(([type, t]) => ({ type, url: mkGo([type, t]) })),
             title: data.title,
             size: data.size,
           }
