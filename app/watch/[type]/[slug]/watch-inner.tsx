@@ -32,15 +32,15 @@ export function WatchInnerClient({
   const seasons = getSeasons(item)
   const movieLinks = type === "movies" ? parseMovieLinks(item.links) : []
 
-  // Rank sources by resolution (1080p > 720p > 480p), then by size, so the
-  // player opens on the best available quality.
+  // Rank sources by resolution first (1080p > 720p > 480p), then prefer the
+  // smallest file at that resolution (faster start, same fidelity).
   const qualityScore = (raw: string): number => {
     const p = /(\d{3,4})p/i.exec(raw)
     const size = /([\d.]+)\s*(GB|MB)/i.exec(raw)
     const mb = size
       ? parseFloat(size[1]) * (size[2].toUpperCase() === "GB" ? 1024 : 1)
       : 0
-    return (p ? parseInt(p[1], 10) : 0) * 100_000 + Math.round(mb)
+    return (p ? parseInt(p[1], 10) : 0) * 100_000 - Math.round(mb)
   }
 
   const bestMovie = [...movieLinks].sort(

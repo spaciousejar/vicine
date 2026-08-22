@@ -9,6 +9,40 @@ import { filesToSubtitleTracks, type SubtitleTrack } from "@/lib/subtitles"
 
 const HLS_EXT = /\.m3u8($|\?)/i
 
+// ---------------------------------------------------------------------------
+// Network-adaptive quality (Auto mode)
+// ---------------------------------------------------------------------------
+
+type NetTier = "high" | "mid" | "low"
+
+function netTier(): NetTier {
+  // Client components still pre-render on the server — guard accordingly.
+  if (typeof navigator === "undefined") return "high"
+  const conn = (
+    navigator as Navigator & {
+      connection?: { downlink?: number; effectiveType?: string }
+    }
+  ).connection
+  if (typeof conn?.downlink === "number") {
+    if (conn.downlink >= 8) return "high"
+    if (conn.downlink >= 3) return "mid"
+    return "low"
+  }
+  if (conn?.effectiveType === "4g") return "high"
+  if (conn?.effectiveType === "3g") return "mid"
+  if (conn?.effectiveType) return "low"
+  // Unknown — assume plenty; the stall monitor will step down if needed.
+  return "high"
+}
+
+/** Index into a best-first variant list for the given network tier. */
+function tierIndexFor(tier: NetTier, count: number): number {
+  if (count <= 1) return 0
+  if (tier === "high") return 0
+  if (tier === "mid") return Math.floor(count / 2)
+  return count - 1
+}
+
 export function VideoPlayer({
   url,
   label,
@@ -36,6 +70,17 @@ export function VideoPlayer({
   const [copied, setCopied] = useState(false)
   // Preserve playback position across in-player quality switches.
   const resumeAtRef = useRef<number | null>(null)
+  // Sources already attempted during auto-descend, so failures cascade
+  // downward without looping.
+  const triedUrlsRef = useRef<Set<string>>(new Set())
+  // Where Auto mode would place us on this title (null = already there).
+  const tierTargetUrl = useMemo(() => {
+    if (!variants || variants.length < 2) return null
+    const opts = variants.map((v) => ({ id: v.url, label: v.label }))
+    const idx = tierIndexFor(netTier(), opts.length)
+    const t = opts[Math.min(idx, opts.length - 1)]
+    return t && t.id !== url ? t.id : null
+  }, [variants, url])
   const [videoUrl, setVideoUrl] = useState<string | null>(vsrcOverride)
   const [resolving, setResolving] = useState(Boolean(url) && !vsrcOverride)
   const [error, setError] = useState(false)
@@ -46,6 +91,12 @@ export function VideoPlayer({
   const [goUrls, setGoUrls] = useState<string[]>([])
   const [goIdx, setGoIdx] = useState(0)
   const [goMode, setGoMode] = useState(false)
+  // Auto quality: pick per network speed, adapt on stalls/smooth playback.
+  const [autoMode, setAutoMode] = useState(true)
+  const autoAppliedKeyRef = useRef<string | null>(null)
+  const lastSwitchRef = useRef(0)
+  const stallRef = useRef({ count: 0, windowStart: 0 })
+  const healthySinceRef = useRef<number | null>(null)
   // Subtitle tracks: user uploads plus embedded streams discovered via
   // /api/subs. Embedded entries start with src="" and extract on demand;
   // pendingSub tracks that in-flight request.
@@ -75,6 +126,12 @@ export function VideoPlayer({
     setSubs([])
     setPendingSub(null)
   }
+
+  // External source change resets the auto-descend ledger so failures
+  // cascade from the new source downward.
+  useEffect(() => {
+    triedUrlsRef.current = new Set(url ? [url] : [])
+  }, [url])
 
   useEffect(() => {
     if (!url) return
@@ -120,12 +177,32 @@ export function VideoPlayer({
     }
 
     if (vsrcOverride) return
+
+    // Auto mode: on first sight of a title, start at the tier the network
+    // supports instead of blindly opening the best source.
+    const titleKey = (variants ?? []).map((v) => v.url).join("|")
+    if (
+      autoMode &&
+      !vsrcOverride &&
+      (variants?.length ?? 0) > 1 &&
+      autoAppliedKeyRef.current !== titleKey
+    ) {
+      autoAppliedKeyRef.current = titleKey
+      if (tierTargetUrl) {
+        lastSwitchRef.current = Date.now()
+        triedUrlsRef.current = new Set([tierTargetUrl])
+        onUrlChangeRef.current?.(tierTargetUrl)
+        return
+      }
+    }
+
     resolve(1)
 
     return () => {
       cancelled = true
     }
-  }, [url, resolveAttempt])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- qualityOptions/variants are derived; the tier pick runs once per title via autoAppliedKeyRef
+  }, [url, resolveAttempt, autoMode])
 
   // Firefox/Safari cannot demux MKV natively while Chrome tolerates it.
   // Route non-HLS sources through the server-side transmux proxy when the
@@ -150,8 +227,59 @@ export function VideoPlayer({
     // qualityTag is a pure helper defined above; stable across renders.
   }, [variants, url, label])
 
+  // Shared programmatic switch: saves position, clears transient failure
+  // state, throttles rapid auto-adjustments (manual picks bypass throttle).
+  function switchTo(id: string) {
+    if (!id || id === url) return
+    const v = document.querySelector<HTMLVideoElement>(
+      ".media-default-skin video"
+    )
+    if (v && Number.isFinite(v.currentTime)) resumeAtRef.current = v.currentTime
+    setUseHlsProxy(false)
+    setResolveAttempt(0)
+    setError(false)
+    setResolving(true)
+    setSubs([])
+    setGoUrls([])
+    setGoIdx(0)
+    setGoMode(false)
+    lastSwitchRef.current = Date.now()
+    triedUrlsRef.current = new Set([id])
+    onUrlChangeRef.current?.(id)
+  }
+
+  // The variant Auto currently maps to — drives the "Auto · <label>" hint.
+  const autoPick = useMemo(() => {
+    if (qualityOptions.length === 0) return null
+    const idx = tierIndexFor(netTier(), qualityOptions.length)
+    return qualityOptions[idx] ?? qualityOptions[0]
+    // Recomputed when the catalog changes; netTier is read live elsewhere.
+  }, [qualityOptions])
+
+  const menuQualities = useMemo(() => {
+    const list = [...qualityOptions]
+    if (qualityOptions.length > 1) {
+      list.unshift({
+        id: "auto",
+        label: autoPick ? `Auto · ${autoPick.label}` : "Auto",
+      })
+    }
+    return list
+  }, [qualityOptions, autoPick])
+
+  function handleQualityMenu(id: string) {
+    if (id === "auto") {
+      setAutoMode(true)
+      if (autoPick) switchTo(autoPick.id)
+      return
+    }
+    setAutoMode(false)
+    handleQualityChange(id)
+  }
+
   function handleQualityChange(id: string) {
     if (id === url) return
+    triedUrlsRef.current = new Set([id])
     const v = document.querySelector<HTMLVideoElement>(
       ".media-default-skin video"
     )
@@ -168,12 +296,93 @@ export function VideoPlayer({
     onUrlChangeRef.current?.(id)
   }
 
+  // Auto-descend helper: switch to the next untried catalog variant,
+  // preserving playback position. Returns false when nothing is left.
+  function descendQuality(): boolean {
+    const candidates = qualityOptions.filter(
+      (o) => o.id !== url && !triedUrlsRef.current.has(o.id)
+    )
+    const next = candidates[0]
+    if (!next) return false
+    triedUrlsRef.current.add(url!)
+    triedUrlsRef.current.add(next.id)
+    const v = document.querySelector<HTMLVideoElement>(
+      ".media-default-skin video"
+    )
+    if (v && Number.isFinite(v.currentTime)) resumeAtRef.current = v.currentTime
+    setUseHlsProxy(false)
+    setResolveAttempt(0)
+    setResolving(true)
+    onUrlChangeRef.current?.(next.id)
+    return true
+  }
+
   const playSrc = useMemo(() => {
     if (!videoUrl) return null
     if (HLS_EXT.test(videoUrl)) return videoUrl
     if (!useHlsProxy) return videoUrl
     return `/api/stream/direct/index.m3u8?url=${encodeURIComponent(videoUrl)}`
   }, [videoUrl, useHlsProxy])
+
+  // Live adaptation in Auto mode: repeated buffering steps the quality
+  // down; long smooth playback allows stepping up (throttled).
+  useEffect(() => {
+    if (!playSrc || !autoMode || qualityOptions.length < 2) return
+    const v = document.querySelector<HTMLVideoElement>(
+      ".media-default-skin video"
+    )
+    if (!v) return
+
+    const currentIdx = qualityOptions.findIndex((o) => o.id === url)
+    if (currentIdx === -1) return // mirror/interstitial source — skip
+
+    const trySwitch = (idx: number) => {
+      if (Date.now() - lastSwitchRef.current < 5000) return
+      const target = qualityOptions[idx]
+      if (!target || target.id === url) return
+      lastSwitchRef.current = Date.now()
+      stallRef.current = { count: 0, windowStart: 0 }
+      healthySinceRef.current = null
+      if (v && Number.isFinite(v.currentTime))
+        resumeAtRef.current = v.currentTime
+      setResolveAttempt(0)
+      onUrlChangeRef.current?.(target.id)
+    }
+
+    const onWaiting = () => {
+      const now = Date.now()
+      if (now - stallRef.current.windowStart > 10_000) {
+        stallRef.current = { count: 0, windowStart: now }
+      }
+      stallRef.current.count += 1
+      if (
+        stallRef.current.count >= 3 &&
+        currentIdx < qualityOptions.length - 1
+      ) {
+        trySwitch(currentIdx + 1)
+      }
+    }
+    const onPlaying = () => {
+      if (healthySinceRef.current === null) healthySinceRef.current = Date.now()
+      if (
+        currentIdx > 0 &&
+        Date.now() - healthySinceRef.current > 20_000 &&
+        netTier() !== "low" &&
+        Date.now() - lastSwitchRef.current > 15_000
+      ) {
+        trySwitch(currentIdx - 1)
+      }
+      stallRef.current.count = Math.max(0, stallRef.current.count - 1)
+    }
+
+    v.addEventListener("waiting", onWaiting)
+    v.addEventListener("playing", onPlaying)
+    return () => {
+      v.removeEventListener("waiting", onWaiting)
+      v.removeEventListener("playing", onPlaying)
+      healthySinceRef.current = null
+    }
+  }, [playSrc, autoMode, url, qualityOptions])
 
   // Restore the playback position after an in-player quality switch.
   useEffect(() => {
@@ -306,6 +515,18 @@ export function VideoPlayer({
   })
 
   function handlePlayerError() {
+    const media = document.querySelector<HTMLVideoElement>(
+      ".media-default-skin video"
+    )
+    // AbortError-class failures fire on every source swap; they are not
+    // real playback problems.
+    if (
+      media?.error &&
+      media.error.code === (media.error.MEDIA_ERR_ABORTED ?? 1)
+    ) {
+      return
+    }
+
     const src = playSrc ?? ""
     // Tokenized /go source failed: try the next mirror type. The transmux
     // proxy can't handle redirecting tokenized URLs, so skip it here.
@@ -315,10 +536,16 @@ export function VideoPlayer({
         setVideoUrl(goUrls[goIdx + 1])
         return
       }
+      // Mirrors exhausted — descend through remaining catalog qualities.
+      if (descendQuality()) return
     } else if (!useHlsProxy && videoUrl && !HLS_EXT.test(videoUrl)) {
       // Keep videoUrl: playSrc recomputes to the proxy URL and the key
       // change remounts the player in HLS mode immediately.
       setUseHlsProxy(true)
+      return
+    } else if (descendQuality()) {
+      // Direct source failed even through the proxy: auto-switch to the
+      // next-best catalog quality before giving up.
       return
     }
     // Resolved links can be short-lived or single-use; retry with a fresh
@@ -371,9 +598,9 @@ export function VideoPlayer({
                   : null
               }
               onAddSubtitleFiles={handleSubtitleFiles}
-              qualities={qualityOptions}
-              activeQualityId={url}
-              onQualityChange={handleQualityChange}
+              qualities={menuQualities}
+              activeQualityId={autoMode ? "auto" : url}
+              onQualityChange={handleQualityMenu}
             />
           )}
           {error && (
@@ -431,7 +658,6 @@ export function VideoPlayer({
           externally
         </a>
       </div>
-      <p className="text-xs break-all text-muted-foreground">{url}</p>
     </div>
   )
 }

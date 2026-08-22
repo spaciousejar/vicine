@@ -17,16 +17,37 @@ const fontMono = Geist_Mono({
 // TypeErrors when streaming marks arrive out of order ("cannot have a
 // negative time stamp"). Swallow only that failure mode; real measurements
 // still work. Runs before hydration so it wraps every later call.
-const MEASURE_GUARD = `
+//
+// HTMLMediaElement.play() rejections (AbortError when the element is
+// swapped during quality switches, NotSupportedError handled via the
+// element's error event) surface as fatal dev overlays even though the
+// player recovers — silence the promise rejections; real error handling
+// listens to the media element itself.
+const MEDIA_GUARDS = `
 (function () {
-  var orig = performance.measure.bind(performance);
+  var origMeasure = performance.measure.bind(performance);
   performance.measure = function () {
     try {
-      return orig.apply(performance, arguments);
+      return origMeasure.apply(performance, arguments);
     } catch (e) {
       if (String(e).indexOf("negative time stamp") === -1) throw e;
     }
   };
+  if (!HTMLMediaElement.prototype.__vicinePatched) {
+    var origPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () {
+      try {
+        var p = origPlay.apply(this, arguments);
+        if (p && typeof p.catch === "function") {
+          p.catch(function () {});
+        }
+        return p;
+      } catch (e) {
+        return Promise.reject(e);
+      }
+    };
+    HTMLMediaElement.prototype.__vicinePatched = true;
+  }
 })();
 `
 
@@ -53,8 +74,8 @@ export default function RootLayout({
       )}
     >
       <body>
-        <Script id="perf-measure-guard" strategy="beforeInteractive">
-          {MEASURE_GUARD}
+        <Script id="media-guards" strategy="beforeInteractive">
+          {MEDIA_GUARDS}
         </Script>
         <ThemeProvider>{children}</ThemeProvider>
       </body>
