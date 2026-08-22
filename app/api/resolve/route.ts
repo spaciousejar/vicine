@@ -291,10 +291,13 @@ export async function GET(req: NextRequest) {
     // ?debug=1 attaches per-attempt evidence to the failure payload so
     // environment-specific breakage (e.g. egress differences) is visible.
     const debug = req.nextUrl.searchParams.get("debug") === "1"
+    const trace: Record<string, unknown>[] = []
 
     // Preferred path: delegate the whole chain to a Cloudflare Worker
-    // (RESOLVE_WORKER_URL). Upstream hosts trust CF egress but hang or
-    // reject serverless-platform egress, so resolution must run there.
+    // (RESOLVE_WORKER_URL). Upstream hosts block most datacenter egress,
+    // but a worker on a custom domain sometimes passes where platforms
+    // can't. On failure we fall through to the local chain and finally the
+    // browser-traversed /go fallback.
     const remoteBase = process.env.RESOLVE_WORKER_URL
     if (remoteBase) {
       try {
@@ -319,15 +322,8 @@ export async function GET(req: NextRequest) {
           cachePut(cacheKey, payload)
           return NextResponse.json(payload)
         }
-        if (!probing) {
-          cachePut(cacheKey, FAILED_PAYLOAD, NEGATIVE_TTL_MS)
-        }
-        return NextResponse.json(
-          debug && data.trace
-            ? { ...FAILED_PAYLOAD, via: "worker", trace: data.trace }
-            : FAILED_PAYLOAD,
-          { status: 502 }
-        )
+        if (data.trace)
+          trace.push(...data.trace.map((t) => ({ ...t, via: "worker" })))
       } catch {
         // Worker unreachable — fall through to the legacy local chain.
       }
@@ -338,7 +334,6 @@ export async function GET(req: NextRequest) {
     // wall-clock budget keeps worst-case latency bounded instead of
     // stacking full retry rounds.
     const deadline = Date.now() + RESOLVE_BUDGET_MS
-    const trace: Record<string, unknown>[] = []
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const remaining = deadline - Date.now()
