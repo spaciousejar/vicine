@@ -417,6 +417,34 @@ export async function GET(req: NextRequest) {
       if (Date.now() >= deadline) break
     }
 
+    // Last resort: hand the browser a tokenized /go URL. Upstream hosts
+    // 403 every datacenter egress we have (Vercel, CF Workers), so let the
+    // user's own connection traverse the redirect chain inside <video>.
+    try {
+      const linksRes = await timedFetch(
+        `${effectiveBase}/api/links?vcloud=${encodeURIComponent(vcloudUrl)}`,
+        undefined,
+        FETCH_TIMEOUT_MS
+      )
+      if (linksRes.ok) {
+        const data = await linksRes.json()
+        const tokens: Record<string, Token> = data.tokens ?? {}
+        const first = Object.entries(tokens).find(([, t]) => t?.ts && t?.sig)
+        if (first && first[1].ts && first[1].sig) {
+          const payload = {
+            goUrl:
+              `${effectiveBase}/go?type=${first[0]}` +
+              `&vcloud=${encodeURIComponent(vcloudUrl)}` +
+              `&ts=${first[1].ts}&sig=${first[1].sig}`,
+            title: data.title,
+            size: data.size,
+          }
+          cachePut(cacheKey, payload)
+          return NextResponse.json(payload)
+        }
+      }
+    } catch {}
+
     // Negative-cache so repeat clicks on a dead link fail fast instead of
     // re-running the full chain for the next few minutes.
     cachePut(cacheKey, FAILED_PAYLOAD, NEGATIVE_TTL_MS)

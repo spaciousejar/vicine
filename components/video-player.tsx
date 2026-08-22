@@ -53,12 +53,16 @@ export function VideoPlayer({
         const r = await fetch(`/api/resolve?url=${encodeURIComponent(url!)}`)
         const data = await r.json()
         if (cancelled) return
-        if (data.videoUrl) {
-          setVideoUrl(data.videoUrl)
+        // videoUrl = server-verified direct file. goUrl = tokenized hop URL
+        // the browser itself must traverse (upstreams block datacenter IPs,
+        // so the server cannot follow the chain).
+        const src: string | undefined = data.videoUrl || data.goUrl
+        if (src) {
+          setVideoUrl(src)
           setResolving(false)
           return
         }
-        throw new Error("no videoUrl")
+        throw new Error("no source")
       } catch {
         if (cancelled) return
         if (triesLeft > 0) {
