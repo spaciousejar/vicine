@@ -5,6 +5,11 @@ import Player from "next-video/player"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ExternalLink, Play, Copy, Check, Loader2 } from "lucide-react"
+import {
+  PlayerSettings,
+  filesToSubtitleTracks,
+  type SubtitleTrack,
+} from "@/components/player-settings"
 
 const HLS_EXT = /\.m3u8($|\?)/i
 
@@ -30,6 +35,10 @@ export function VideoPlayer({
   const [goUrls, setGoUrls] = useState<string[]>([])
   const [goIdx, setGoIdx] = useState(0)
   const [goMode, setGoMode] = useState(false)
+  // Subtitle tracks (user-loaded .srt/.vtt) and the active index (-1 = off).
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [subs, setSubs] = useState<SubtitleTrack[]>([])
+  const [activeSub, setActiveSub] = useState(-1)
 
   const [prevUrl, setPrevUrl] = useState(url)
   // Keep the latest callback in a ref so the resolve effect doesn't re-run
@@ -110,6 +119,23 @@ export function VideoPlayer({
     return `/api/stream/direct/index.m3u8?url=${encodeURIComponent(videoUrl)}`
   }, [videoUrl, useHlsProxy])
 
+  // Apply the selected subtitle track to whatever video element is mounted.
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v) return
+    const tt = v.textTracks
+    for (let i = 0; i < tt.length; i++) {
+      tt[i].mode = i === activeSub ? "showing" : "disabled"
+    }
+  }, [activeSub, playSrc, subs])
+
+  async function handleSubtitleFiles(files: FileList | null) {
+    const added = await filesToSubtitleTracks(files)
+    if (added.length === 0) return
+    setSubs((prev) => [...prev, ...added])
+    setActiveSub(subs.length + added.length - 1)
+  }
+
   function handlePlayerError() {
     const src = playSrc ?? ""
     // Tokenized /go source failed: try the next mirror type. The transmux
@@ -166,23 +192,43 @@ export function VideoPlayer({
               </p>
             </div>
           )}
-          {playSrc && (
-            <Player
-              key={playSrc}
-              src={playSrc}
-              autoPlay
-              controls
-              crossOrigin={undefined}
-              onError={handlePlayerError}
-              className="h-full w-full"
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                backgroundColor: "black",
-              }}
-            />
+          {playSrc && !error && (
+            <>
+              <Player
+                key={playSrc}
+                ref={videoRef}
+                src={playSrc}
+                autoPlay
+                controls
+                crossOrigin={undefined}
+                onError={handlePlayerError}
+                className="h-full w-full"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  backgroundColor: "black",
+                }}
+              >
+                {subs.map((t, i) => (
+                  <track
+                    key={t.id}
+                    kind="subtitles"
+                    src={t.src}
+                    label={t.label}
+                    srcLang={t.lang}
+                    default={i === activeSub}
+                  />
+                ))}
+              </Player>
+              <PlayerSettings
+                tracks={subs}
+                active={activeSub}
+                onActiveChange={setActiveSub}
+                onAddFiles={handleSubtitleFiles}
+              />
+            </>
           )}
           {error && (
             <iframe
