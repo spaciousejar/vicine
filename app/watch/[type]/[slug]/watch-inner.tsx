@@ -32,21 +32,45 @@ export function WatchInnerClient({
   const seasons = getSeasons(item)
   const movieLinks = type === "movies" ? parseMovieLinks(item.links) : []
 
+  // Rank sources by resolution (1080p > 720p > 480p), then by size, so the
+  // player opens on the best available quality.
+  const qualityScore = (raw: string): number => {
+    const p = /(\d{3,4})p/i.exec(raw)
+    const size = /([\d.]+)\s*(GB|MB)/i.exec(raw)
+    const mb = size
+      ? parseFloat(size[1]) * (size[2].toUpperCase() === "GB" ? 1024 : 1)
+      : 0
+    return (p ? parseInt(p[1], 10) : 0) * 100_000 + Math.round(mb)
+  }
+
+  const bestMovie = [...movieLinks].sort(
+    (a, b) =>
+      qualityScore(`${b.label}${b.size ?? ""}`) -
+      qualityScore(`${a.label}${a.size ?? ""}`)
+  )[0]
+  const firstSeason = seasons[0]
+  const firstEpisode = firstSeason?.episodes[0]
+  const bestEpisodeLink = [...(firstEpisode?.links ?? [])].sort((a, b) => {
+    // quality strings are bare ("480p"), rank via synthetic label
+    return qualityScore(`x${b.quality}`) - qualityScore(`x${a.quality}`)
+  })[0]
+
   const [url, setUrl] = useState<string | null>(
-    movieLinks[0]?.url ?? seasons[0]?.episodes[0]?.links[0]?.url ?? null
+    bestMovie?.url ?? bestEpisodeLink?.url ?? null
   )
   const [label, setLabel] = useState<string | undefined>(
-    movieLinks[0]
-      ? `${movieLinks[0].label}${movieLinks[0].size ? ` • ${movieLinks[0].size}` : ""}`
-      : seasons[0]
-        ? `S${seasons[0].season} E${seasons[0].episodes[0]?.episode} — ${seasons[0].episodes[0]?.links[0]?.quality}`
+    bestMovie
+      ? `${bestMovie.label}${bestMovie.size ? ` • ${bestMovie.size}` : ""}`
+      : firstSeason && bestEpisodeLink
+        ? `S${firstSeason.season} E${firstEpisode?.episode} — ${bestEpisodeLink.quality}`
         : undefined
   )
   // Sources that failed to resolve — surfaced as unavailable so users stop
   // clicking known-dead links.
   const [failedUrls, setFailedUrls] = useState<string[]>([])
 
-  // Every playable source for this title, for the in-player quality menu.
+  // Every playable source for this title, for the in-player quality menu
+  // (best first).
   const allVariants = (
     type === "movies"
       ? movieLinks.map((l) => ({
@@ -63,7 +87,9 @@ export function WatchInnerClient({
             }))
           )
         )
-  ).filter((v) => !failedUrls.includes(v.url))
+  )
+    .filter((v) => !failedUrls.includes(v.url))
+    .sort((a, b) => qualityScore(b.label) - qualityScore(a.label))
 
   function markUnresolved(u: string) {
     setFailedUrls((prev) => (prev.includes(u) ? prev : [...prev, u]))
