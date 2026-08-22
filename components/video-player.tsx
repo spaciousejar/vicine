@@ -29,6 +29,7 @@ export function VideoPlayer({
   // playback errors since individual mirror types can be dead.
   const [goUrls, setGoUrls] = useState<string[]>([])
   const [goIdx, setGoIdx] = useState(0)
+  const [goMode, setGoMode] = useState(false)
 
   const [prevUrl, setPrevUrl] = useState(url)
   // Keep the latest callback in a ref so the resolve effect doesn't re-run
@@ -46,6 +47,7 @@ export function VideoPlayer({
     setUseHlsProxy(false)
     setGoUrls([])
     setGoIdx(0)
+    setGoMode(false)
   }
 
   useEffect(() => {
@@ -67,10 +69,13 @@ export function VideoPlayer({
           : []
         const src: string | undefined = data.videoUrl || data.goUrl || list[0]
         if (src) {
-          setGoUrls(list.length > 0 ? list : src ? [src] : [])
+          setGoUrls(list.length > 0 ? list : [src])
           setGoIdx(0)
           setVideoUrl(src)
           setResolving(false)
+          // Mirror-only mode means the browser will hit interstitial pages;
+          // don't burn multiple re-resolve rounds before the embed fallback.
+          setGoMode(!data.videoUrl)
           return
         }
         throw new Error("no source")
@@ -122,8 +127,10 @@ export function VideoPlayer({
       return
     }
     // Resolved links can be short-lived or single-use; retry with a fresh
-    // resolution before giving up.
-    if (resolveAttempt >= 2) {
+    // resolution before giving up. Mirror-only mode gets one round since
+    // interstitial walls won't disappear on retry.
+    const maxAttempts = goMode ? 1 : 2
+    if (resolveAttempt >= maxAttempts) {
       setError(true)
       return
     }
