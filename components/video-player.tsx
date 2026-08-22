@@ -397,6 +397,37 @@ export function VideoPlayer({
     }
   }, [playSrc, autoMode, url, qualityOptions])
 
+  // Warm the resolve cache for sibling qualities once playback starts, so
+  // later quality switches are instant instead of re-running the chain.
+  const prefetchedKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!playSrc || !videoUrl) return
+    const siblings = (variants ?? [])
+      .map((v) => v.url)
+      .filter((u) => u !== videoUrl)
+      .slice(0, 4)
+    if (siblings.length === 0) return
+    const key = `${videoUrl}|${siblings.join("|")}`
+    if (prefetchedKeyRef.current === key) return
+    prefetchedKeyRef.current = key
+
+    const start = () => {
+      for (const u of siblings) {
+        fetch(`/api/resolve?url=${encodeURIComponent(u)}`).catch(() => {})
+      }
+    }
+    const v = document.querySelector<HTMLVideoElement>(
+      ".media-default-skin video"
+    )
+    if (v && v.readyState >= 2) {
+      setTimeout(start, 1500) // let the current source grab bandwidth first
+    } else {
+      v?.addEventListener("playing", () => setTimeout(start, 1500), {
+        once: true,
+      })
+    }
+  }, [playSrc, videoUrl, variants])
+
   // Black-screen detector: some sources (x265/10-bit MKV rips) play audio
   // while the video codec silently fails — no error event is raised, so
   // the normal fallback chain never triggers. If playback starts but no

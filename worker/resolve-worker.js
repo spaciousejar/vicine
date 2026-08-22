@@ -228,45 +228,57 @@ export default {
             bodyHead: JSON.stringify(linksData).slice(0, 200),
           })
 
-        const results = await Promise.allSettled(
-          types.map(async (type) => {
-            const r = await followChain(
-              base,
-              type,
-              vcloudUrl,
-              tokens[type],
-              trace
-            )
-            if (!r) throw new Error(`chain failed for ${type}`)
-            // dl.php extractions are high-trust final links; datacenter-side
-            // probes can be rejected by CDNs even when the URL serves fine.
-            // Return them unverified rather than losing working sources.
-            if (!r.verified && !r.url.includes("dl.php")) {
-              if (!(await isPlayable(r.url, trace)))
-                throw new Error(`unplayable candidate for ${type}`)
-            } else if (!r.verified) {
-              trace?.push({
-                candidate: r.url.slice(0, 90),
-                verdict: "trusted-dlphp",
+        // First success wins immediately — a slow dying mirror must not
+        // delay a healthy sibling chain.
+        let winnerUrl = null
+        try {
+          winnerUrl = await new Promise((resolve, reject) => {
+            const attempts = types.map(async (type) => {
+              const r = await followChain(
+                base,
+                type,
+                vcloudUrl,
+                tokens[type],
+                trace
+              )
+              if (!r) throw new Error(`chain failed for ${type}`)
+              // dl.php extractions are high-trust final links; datacenter-side
+              // probes can be rejected by CDNs even when the URL serves fine.
+              // Return them unverified rather than losing working sources.
+              if (!r.verified && !r.url.includes("dl.php")) {
+                if (!(await isPlayable(r.url, trace)))
+                  throw new Error(`unplayable candidate for ${type}`)
+              } else if (!r.verified) {
+                trace?.push({
+                  candidate: r.url.slice(0, 90),
+                  verdict: "trusted-dlphp",
+                })
+              }
+              return r.url
+            })
+            let pending = attempts.length
+            if (pending === 0) throw new Error("no candidates")
+            attempts.forEach((p, i) => {
+              p.then(resolve).catch((e) => {
+                pending -= 1
+                trace?.push({
+                  step: `chain:${types[i]}`,
+                  error: String(e).slice(0, 140),
+                })
+                if (pending === 0) reject(new Error("all chains failed"))
               })
-            }
-            return r.url
+            })
           })
-        )
-        const winner = results.find((r) => r.status === "fulfilled")
-        if (winner)
+        } catch {
+          // all chains failed this attempt — fall through to retry loop
+        }
+
+        if (winnerUrl)
           return json({
-            videoUrl: winner.value,
+            videoUrl: winnerUrl,
             title: linksData.title,
             size: linksData.size,
           })
-        results.forEach((r, i) => {
-          if (r.status === "rejected")
-            trace?.push({
-              step: `chain:${types[i]}`,
-              error: String(r.reason).slice(0, 140),
-            })
-        })
 
         if (debug) trace?.push({ step: "attempt", done: attempt + 1 })
       }

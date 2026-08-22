@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from "next/server"
 const WORKER_HOSTS = [".workers.dev"]
 const FETCH_TIMEOUT_MS = 6000
 const RESOLVE_BUDGET_MS = 9000
-const CACHE_TTL_MS = 60_000
+// Upstream signed links stay valid for hours; caching resolutions for 15
+// minutes makes quality switches (and revisits) effectively instant.
+const CACHE_TTL_MS = 900_000
 // Failed resolutions are cached briefly: dead links stop being re-probed on
 // every click, while genuinely transient upstream hiccups recover fast.
 const NEGATIVE_TTL_MS = 180_000
@@ -148,7 +150,7 @@ async function isPlayable(
   }
 }
 
-type ChainResult = { url: string; verified: boolean }
+type ChainResult = { url: string; verified: boolean; fromDlphp?: boolean }
 
 async function followChain(
   workerBase: string,
@@ -184,7 +186,10 @@ async function followChain(
         const link = hopUrl.searchParams.get("link")
         // Extracted link hasn't been probed yet — caller must verify.
         if (link)
-          return isSafeHopUrl(link) ? { url: link, verified: false } : null
+          // fromDlphp: trusted origin — skip playability probes.
+          return isSafeHopUrl(link)
+            ? { url: link, verified: false, fromDlphp: true }
+            : null
       }
     } catch {}
 
@@ -231,8 +236,10 @@ async function tryType(
 ): Promise<string> {
   const result = await followChain(workerBase, type, vcloudUrl, token)
   if (!result) throw new Error(`chain failed for ${type}`)
-  if (!result.verified && !(await isPlayable(result.url, trace))) {
-    throw new Error(`unplayable candidate for ${type}`)
+  if (!result.verified && !result.fromDlphp) {
+    if (!(await isPlayable(result.url, trace))) {
+      throw new Error(`unplayable candidate for ${type}`)
+    }
   }
   return result.url
 }
@@ -384,27 +391,38 @@ export async function GET(req: NextRequest) {
       if (debug && types.length === 0)
         trace.push({ step: "tokens", empty: true })
 
-      const chainResults = await Promise.allSettled(
-        types.map((type) =>
-          tryType(effectiveBase, type, vcloudUrl, tokens[type], trace)
-        )
-      )
-      if (debug)
-        chainResults.forEach((r, i) => {
-          if (r.status === "rejected")
-            trace.push({
-              step: `chain:${types[i]}`,
-              error: String(r.reason).slice(0, 140),
+      // First success wins immediately — a slow dying mirror (e.g. a 404
+      // that takes 4s to answer) must not delay a healthy sibling chain.
+      let winnerUrl: string | null = null
+      try {
+        winnerUrl = await new Promise<string>((resolve, reject) => {
+          const attempts = types.map((type) =>
+            tryType(effectiveBase, type, vcloudUrl, tokens[type], trace)
+          )
+          let pending = attempts.length
+          if (pending === 0) {
+            reject(new Error("no candidates"))
+            return
+          }
+          attempts.forEach((p, i) => {
+            p.then(resolve).catch((e) => {
+              pending -= 1
+              if (debug)
+                trace.push({
+                  step: `chain:${types[i]}`,
+                  error: String(e).slice(0, 140),
+                })
+              if (pending === 0) reject(new Error("all chains failed"))
             })
+          })
         })
-      const winner = chainResults.find((r) => r.status === "fulfilled")
+      } catch {
+        // Every chain failed this attempt — fall through to the retry
+        // loop / final fallback below.
+      }
 
-      if (winner) {
-        const payload = {
-          videoUrl: (winner as PromiseFulfilledResult<string>).value,
-          title,
-          size,
-        }
+      if (winnerUrl) {
+        const payload = { videoUrl: winnerUrl, title, size }
         cachePut(cacheKey, payload)
         return NextResponse.json(payload)
       }
