@@ -236,6 +236,27 @@ export async function fetchBySlug(
   return null
 }
 
+// /api/trending returns a bare array of items instead of { data }.
+export async function fetchTrending(limit = 12): Promise<MediaItem[]> {
+  try {
+    const res = await fetch(`${BASE_URL}/api/trending?page=1&limit=${limit}`, {
+      next: { revalidate: 600 },
+    })
+    if (!res.ok) return []
+    const data: unknown = await res.json()
+    const arr: unknown[] = Array.isArray(data)
+      ? data
+      : Array.isArray((data as { data?: unknown[] })?.data)
+        ? (data as { data: unknown[] }).data
+        : []
+    return arr.filter((d): d is MediaItem =>
+      Boolean(d && (d as MediaItem).url_slug)
+    )
+  } catch {
+    return []
+  }
+}
+
 export async function searchContent(q: string): Promise<MediaItem[]> {
   const encoded = encodeURIComponent(q.trim()).replace(/%20/g, "+")
   const res = await fetch(`${BASE_URL}/api/search/${encoded}`, {

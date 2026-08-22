@@ -6,15 +6,23 @@ import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { fetchAnime, fetchMovies, fetchSeries, getImage } from "@/lib/api"
-import { Clapperboard, Film, Tv, Sparkles } from "lucide-react"
+import {
+  fetchAnime,
+  fetchMovies,
+  fetchSeries,
+  fetchTrending,
+  getImage,
+} from "@/lib/api"
+import { Clapperboard, Film, Tv, Sparkles, Flame } from "lucide-react"
+import { TrendingRow, TrendingRowSkeleton } from "@/components/trending-row"
 import { cn } from "@/lib/utils"
 
 export default async function HomePage() {
-  const [moviesRes, animeRes, seriesRes] = await Promise.all([
+  const [moviesRes, animeRes, seriesRes, trending] = await Promise.all([
     fetchMovies(1, 12),
     fetchAnime(1, 12),
     fetchSeries(1, 12),
+    fetchTrending(12),
   ])
 
   const hero = moviesRes.data[0] ?? animeRes.data[0] ?? seriesRes.data[0]
@@ -80,6 +88,22 @@ export default async function HomePage() {
         )}
 
         <div className="mt-8 grid gap-8">
+          {trending.length > 0 && (
+            <>
+              <section className="min-w-0">
+                <div className="mb-3 flex items-center gap-2">
+                  <Flame className="size-4 text-primary" />
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    Trending now
+                  </h2>
+                </div>
+                <Suspense fallback={<TrendingRowSkeleton />}>
+                  <TrendingRow items={trending} />
+                </Suspense>
+              </section>
+              <Separator />
+            </>
+          )}
           <Section
             title="Movies"
             icon={<Film className="size-4" />}
