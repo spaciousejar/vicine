@@ -28,9 +28,17 @@ import crypto from "node:crypto"
 const PORT = Number(process.env.PORT || 7777)
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg"
 const FFPROBE = process.env.FFPROBE_PATH || "ffprobe"
-const TIMEOUT_MS = 120_000
+const PROBE_TIMEOUT_MS = 30_000
+const EXTRACT_TIMEOUT_MS = 280_000 // whole-file read; must outlive the proxy route
 const CACHE_DIR = path.join(os.tmpdir(), "vicine-subs")
 fs.mkdirSync(CACHE_DIR, { recursive: true })
+
+// Sweep abandoned partial extractions from previous runs/crashes.
+for (const f of fs.readdirSync(CACHE_DIR)) {
+  if (f.endsWith(".part")) {
+    try { fs.unlinkSync(path.join(CACHE_DIR, f)) } catch {}
+  }
+}
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
@@ -68,8 +76,12 @@ function safeUrl(u) {
   }
 }
 
-function cachePath(url, index) {
-  const hash = crypto.createHash("sha1").update(`${url}|${index}`).digest("hex")
+// Cache identity comes from the caller-supplied stable key when present —
+// resolved media urls carry rotating signed params that would otherwise
+// bust the cache every session.
+function cachePath(key, url, index) {
+  const id = key && key.length <= 300 ? key : url
+  const hash = crypto.createHash("sha1").update(`${id}|${index}`).digest("hex")
   return path.join(CACHE_DIR, `${hash}.vtt`)
 }
 
@@ -86,7 +98,7 @@ async function probe(url, select = "s") {
     select,
     url,
   ]
-  const stdout = await execFileFile(FFPROBE, args, { timeout: TIMEOUT_MS })
+  const stdout = await execFileFile(FFPROBE, args, { timeout: PROBE_TIMEOUT_MS })
   const parsed = JSON.parse(stdout)
   return (parsed.streams || []).map((s) => ({
     index: s.index,
@@ -145,8 +157,8 @@ async function remuxAudio(url, audioIndex, res) {
   res.on("close", () => child.kill("SIGKILL"))
 }
 
-async function extract(url, index, res) {
-  const cached = cachePath(url, index)
+async function extract(url, index, res, key) {
+  const cached = cachePath(key, url, index)
   if (fs.existsSync(cached)) {
     cors(res, "text/vtt")
     fs.createReadStream(cached).pipe(res)
@@ -167,7 +179,7 @@ async function extract(url, index, res) {
     tmp,
   ]
   try {
-    await execFileFile(FFMPEG, args, { timeout: TIMEOUT_MS })
+    await execFileFile(FFMPEG, args, { timeout: EXTRACT_TIMEOUT_MS })
   } catch (e) {
     fail(res, 502, String(e.message || e).slice(0, 200))
     return
@@ -223,7 +235,8 @@ const server = http.createServer(async (req, res) => {
       const index = Number.parseInt(u.searchParams.get("index") || "", 10)
       if (!Number.isInteger(index) || index < 0)
         return fail(res, 400, "bad index")
-      return await extract(url, index, res)
+      const key = u.searchParams.get("key") || ""
+      return await extract(url, index, res, key.slice(0, 300))
     }
 
     if (pathname === "/audio") {

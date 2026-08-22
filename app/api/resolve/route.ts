@@ -479,8 +479,9 @@ export async function GET(req: NextRequest) {
     } catch {}
 
     // Negative-cache so repeat clicks on a dead link fail fast instead of
-    // re-running the full chain for the next few minutes.
-    cachePut(cacheKey, FAILED_PAYLOAD, NEGATIVE_TTL_MS)
+    // re-running the full chain for the next few minutes. Probe-bypassed
+    // audits must not poison real-user caches.
+    if (!probing) cachePut(cacheKey, FAILED_PAYLOAD, NEGATIVE_TTL_MS)
     return NextResponse.json(
       debug ? { ...FAILED_PAYLOAD, trace } : FAILED_PAYLOAD,
       { status: 502 }

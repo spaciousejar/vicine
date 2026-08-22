@@ -424,7 +424,17 @@ function SettingsMenu({
   const hasQuality = quality?.state.availability === "available"
   const hasCaptions = captions?.state.availability === "available"
 
-  if (!hasPlaybackRate && !hasQuality && !hasCaptions)
+  const hasCustomGroups =
+    (qualities?.length ?? 0) > 1 ||
+    (audioOptions?.length ?? 0) > 1 ||
+    Boolean(onLoadSubtitleFiles)
+
+  if (
+    !hasPlaybackRate &&
+    !hasQuality &&
+    !hasCaptions &&
+    !hasCustomGroups
+  )
     return null
 
   return (

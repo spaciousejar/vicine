@@ -47,10 +47,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "url not allowed" }, { status: 403 })
   }
   const index = req.nextUrl.searchParams.get("index") ?? "0"
+  // Stable per-source identity so sidecar caches survive signed-url rotation
+  const stableKey = (req.nextUrl.searchParams.get("key") || "").slice(0, 300)
 
   const target =
     mode === "extract"
-      ? `${SIDECAR}/extract?url=${encodeURIComponent(url)}&index=${index}`
+      ? `${SIDECAR}/extract?url=${encodeURIComponent(url)}&index=${index}&key=${encodeURIComponent(stableKey)}`
       : mode === "audio"
         ? `${SIDECAR}/audio?url=${encodeURIComponent(url)}&index=${index}`
         : `${SIDECAR}/list?url=${encodeURIComponent(url)}`

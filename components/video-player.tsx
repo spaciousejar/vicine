@@ -373,7 +373,7 @@ export function VideoPlayer({
     if (!videoUrl) return null
     // Non-default audio selected: sidecar remuxes video + chosen track.
     if (activeAudioId !== "default") {
-      return `/api/subs?mode=audio&url=${encodeURIComponent(videoUrl)}&index=${activeAudioId}`
+      return `/api/subs?mode=audio&url=${encodeURIComponent(videoUrl)}&index=${activeAudioId}&key=${encodeURIComponent(stableKeyRef.current ?? "")}`
     }
     if (HLS_EXT.test(videoUrl)) return videoUrl
     if (!useHlsProxy) return videoUrl
@@ -393,10 +393,12 @@ export function VideoPlayer({
   // down; long smooth playback allows stepping up (throttled).
   useEffect(() => {
     if (!playSrc || !autoMode || qualityOptions.length < 2) return
-    const v = document.querySelector<HTMLVideoElement>(
-      ".media-default-skin video"
-    )
-    if (!v) return
+    let cancelled = false
+    let detach: (() => void) | null = null
+
+    void waitForVideo().then((mediaEl) => {
+      if (cancelled || !mediaEl) return
+      const v = mediaEl
 
     const currentIdx = qualityOptions.findIndex((o) => o.id === url)
     if (currentIdx === -1) return // mirror/interstitial source — skip
@@ -440,12 +442,15 @@ export function VideoPlayer({
       stallRef.current.count = Math.max(0, stallRef.current.count - 1)
     }
 
-    v.addEventListener("waiting", onWaiting)
-    v.addEventListener("playing", onPlaying)
-    return () => {
+    detach = () => {
       v.removeEventListener("waiting", onWaiting)
       v.removeEventListener("playing", onPlaying)
       healthySinceRef.current = null
+    }
+    })
+    return () => {
+      cancelled = true
+      detach?.()
     }
   }, [playSrc, autoMode, url, qualityOptions])
 
@@ -531,9 +536,12 @@ export function VideoPlayer({
     // Source-level failures that never reach onError (manifest fetches
     // failing repeatedly, hung loads): if playback never reaches data,
     // terminate the chain.
-    stuckTimer = setTimeout(() => {
-      if (!cancelled && !gotFrame && v.readyState < 2) fail()
-    }, 10_000)
+    stuckTimer = setTimeout(
+      () => {
+        if (!cancelled && !gotFrame && v.readyState < 2) fail()
+      },
+      playSrc.includes("/api/stream/") ? 20_000 : 10_000
+    )
 
     v.addEventListener("loadedmetadata", arm)
     v.addEventListener("playing", arm)
@@ -568,16 +576,25 @@ export function VideoPlayer({
       const t = setInterval(() => {
         if (trySeek()) clearInterval(t)
       }, 200)
-      setTimeout(() => clearInterval(t), 8000)
+      setTimeout(() => clearInterval(t), 20_000)
     }
   }, [playSrc])
+
+  // Stable per-source identity for sidecar caches (survives signed-url
+  // rotation between sessions).
+  const stableKeyRef = useRef(url)
+  useEffect(() => {
+    if (url) stableKeyRef.current = url
+  }, [url])
 
   // Ask the sidecar (via /api/subs) what subtitle and audio streams the
   // file carries. Dual-audio sources expose a switchable audio menu.
   useEffect(() => {
     if (!videoUrl || HLS_EXT.test(videoUrl)) return
     let cancelled = false
-    fetch(`/api/subs?mode=list&url=${encodeURIComponent(videoUrl)}`)
+    fetch(
+      `/api/subs?mode=list&url=${encodeURIComponent(videoUrl)}&key=${encodeURIComponent(stableKeyRef.current ?? "")}`
+    )
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (cancelled) return
@@ -599,18 +616,6 @@ export function VideoPlayer({
                   }) satisfies SubtitleTrack
               ),
           ])
-        }
-
-        // Pre-extract the first subtitle track once playback has had time
-        // to settle: sidecar caches it, so selecting later is instant.
-        if (data?.tracks?.length) {
-          setTimeout(
-            () =>
-              fetch(
-                `/api/subs?mode=extract&url=${encodeURIComponent(videoUrl!)}&index=${data.tracks[0].index}`
-              ).catch(() => {}),
-            4000
-          )
         }
 
         if (data?.audioTracks?.length > 1) {
@@ -653,7 +658,7 @@ export function VideoPlayer({
     setPendingSub(trackId)
     try {
       const r = await fetch(
-        `/api/subs?mode=extract&url=${encodeURIComponent(videoUrl!)}&index=${track.index}`
+        `/api/subs?mode=extract&url=${encodeURIComponent(videoUrl!)}&index=${track.index}&key=${encodeURIComponent(stableKeyRef.current ?? "")}`
       )
       if (!r.ok) throw new Error(String(r.status))
       const vtt = await r.text()
