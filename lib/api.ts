@@ -265,6 +265,8 @@ export async function fetchBySlug(
       const list: MediaItem[] = Array.isArray(data) ? (data as MediaItem[]) : []
       const found = list.find((d) => d && d.url_slug === slug)
       if (found) {
+        const cats = (found.categories || "").toLowerCase()
+        if (/\banime\b/.test(cats)) return { item: found, type: "anime" }
         const hasSeasons = Array.from({ length: 15 }).some((_, i) =>
           Boolean(found[`season_${i + 1}`])
         )

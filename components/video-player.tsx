@@ -36,6 +36,29 @@ function netTier(): NetTier {
 }
 
 /** Index into a best-first variant list for the given network tier. */
+// The skin mounts its media element through Suspense, so it may not exist
+// on the first render after a source change. Poll briefly instead of
+// silently skipping protection/monitoring effects.
+function waitForVideo(timeoutMs = 10_000) {
+  return new Promise<HTMLVideoElement | null>((resolve) => {
+    const q = () =>
+      document.querySelector<HTMLVideoElement>(".media-default-skin video")
+    const el = q()
+    if (el) return resolve(el)
+    const t0 = Date.now()
+    const iv = setInterval(() => {
+      const el = q()
+      if (el) {
+        clearInterval(iv)
+        resolve(el)
+      } else if (Date.now() - t0 > timeoutMs) {
+        clearInterval(iv)
+        resolve(null)
+      }
+    }, 200)
+  })
+}
+
 function tierIndexFor(tier: NetTier, count: number): number {
   if (count <= 1) return 0
   if (tier === "high") return 0
@@ -62,8 +85,10 @@ export function VideoPlayer({
 }) {
   // Dev/QA escape hatch: ?vsrc=<url> bypasses link resolution. Guarded for
   // SSR — client components still pre-render on the server.
+  // QA hatch disabled in production builds (content-injection surface).
   const [vsrcOverride] = useState(() =>
-    typeof window === "undefined"
+    typeof window === "undefined" ||
+    process.env.NODE_ENV === "production"
       ? null
       : new URLSearchParams(window.location.search).get("vsrc")
   )
@@ -114,6 +139,7 @@ export function VideoPlayer({
   const [activeAudioId, setActiveAudioId] = useState("default")
   const [pendingSub, setPendingSub] = useState<string | null>(null)
 
+
   const [prevUrl, setPrevUrl] = useState(url)
   // Keep the latest callback in a ref so the resolve effect doesn't re-run
   // when parents pass a fresh inline function each render.
@@ -136,6 +162,8 @@ export function VideoPlayer({
     setGoMode(false)
     setSubs([])
     setPendingSub(null)
+    setAudioOptions([])
+    setActiveAudioId("default")
   }
 
   // External source change resets the auto-descend ledger so failures
@@ -331,7 +359,12 @@ export function VideoPlayer({
     if (v && Number.isFinite(v.currentTime)) resumeAtRef.current = v.currentTime
     setUseHlsProxy(false)
     setResolveAttempt(0)
+    setError(false)
     setResolving(true)
+    setGoUrls([])
+    setGoIdx(0)
+    setGoMode(false)
+    setSubs([])
     onUrlChangeRef.current?.(next.id)
     return true
   }
@@ -460,10 +493,11 @@ export function VideoPlayer({
     let cancelled = false
     let armed = false
     let gotFrame = false
-    const v = document.querySelector<HTMLVideoElement>(
-      ".media-default-skin video"
-    )
-    if (!v) return
+    let detach: (() => void) | null = null
+    let stuckTimer: ReturnType<typeof setTimeout> | undefined = undefined
+
+    void waitForVideo().then((v) => {
+      if (cancelled || !v) return
 
     const fail = () => {
       if (!cancelled && !gotFrame) {
@@ -497,19 +531,23 @@ export function VideoPlayer({
     // Source-level failures that never reach onError (manifest fetches
     // failing repeatedly, hung loads): if playback never reaches data,
     // terminate the chain.
-    const stuckTimer = setTimeout(() => {
+    stuckTimer = setTimeout(() => {
       if (!cancelled && !gotFrame && v.readyState < 2) fail()
     }, 10_000)
 
     v.addEventListener("loadedmetadata", arm)
     v.addEventListener("playing", arm)
     v.addEventListener("error", fail)
-    return () => {
-      cancelled = true
-      clearTimeout(stuckTimer)
+    detach = () => {
       v.removeEventListener("loadedmetadata", arm)
       v.removeEventListener("playing", arm)
       v.removeEventListener("error", fail)
+    }
+    })
+    return () => {
+      cancelled = true
+      if (stuckTimer) clearTimeout(stuckTimer)
+      detach?.()
     }
   }, [playSrc])
 
@@ -533,27 +571,6 @@ export function VideoPlayer({
       setTimeout(() => clearInterval(t), 8000)
     }
   }, [playSrc])
-
-  // Warm embedded-subtitle extraction in the background once discovered:
-  // the sidecar caches results, so selecting a track later is instant.
-  const prefetchedSubRef = useRef(false)
-  useEffect(() => {
-    if (!videoUrl || HLS_EXT.test(videoUrl)) return
-    const t = setTimeout(() => {
-      fetch(`/api/subs?mode=list&url=${encodeURIComponent(videoUrl)}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          const first = data?.tracks?.[0]
-          if (!first || prefetchedSubRef.current) return
-          prefetchedSubRef.current = true
-          fetch(
-            `/api/subs?mode=extract&url=${encodeURIComponent(videoUrl)}&index=${first.index}`
-          ).catch(() => {})
-        })
-        .catch(() => {})
-    }, 4000)
-    return () => clearTimeout(t)
-  }, [videoUrl])
 
   // Ask the sidecar (via /api/subs) what subtitle and audio streams the
   // file carries. Dual-audio sources expose a switchable audio menu.
@@ -582,6 +599,18 @@ export function VideoPlayer({
                   }) satisfies SubtitleTrack
               ),
           ])
+        }
+
+        // Pre-extract the first subtitle track once playback has had time
+        // to settle: sidecar caches it, so selecting later is instant.
+        if (data?.tracks?.length) {
+          setTimeout(
+            () =>
+              fetch(
+                `/api/subs?mode=extract&url=${encodeURIComponent(videoUrl!)}&index=${data.tracks[0].index}`
+              ).catch(() => {}),
+            4000
+          )
         }
 
         if (data?.audioTracks?.length > 1) {

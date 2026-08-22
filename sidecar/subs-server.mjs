@@ -50,10 +50,18 @@ function fail(res, status, message) {
   res.end(JSON.stringify({ error: message }))
 }
 
+const MEDIA_HOST_RE = new RegExp(
+  "(^|\\.)(" +
+    ["vcloud.fit", "workers.dev", "googleusercontent.com", "r2.dev", "hicine.sbs"].join("|") +
+    ")$", "i");
+
 function safeUrl(u) {
   try {
     const parsed = new URL(u)
     if (!/^https?:$/.test(parsed.protocol)) return null
+    if (/^localhost$|\.local$|\.internal$/i.test(parsed.hostname)) return null
+    if (/^[0-9.:]+$/.test(parsed.hostname)) return null // literal IPs
+    if (!MEDIA_HOST_RE.test(parsed.hostname)) return null
     return parsed.toString()
   } catch {
     return null

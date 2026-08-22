@@ -4,8 +4,36 @@ import { NextRequest, NextResponse } from "next/server"
 // running sidecar/subs-server.mjs behind a tunnel). Proxying keeps the
 // origin private; extraction/remux needs ffmpeg, which serverless lacks.
 
+export const maxDuration = 300 // subtitle extraction reads the whole remote file
+
 const SIDECAR = process.env.SUBS_SIDECAR_URL?.replace(/\/+$/, "")
-const TIMEOUT_MS = 150_000 // extracting a big remote file can take a while
+const TIMEOUT_MS = 290_000
+
+// Media hosts we resolve to / stream from. Anything else is rejected so
+// the proxy endpoints cannot be used as an SSRF primitive into private
+// networks. Extend as new CDNs appear in resolved links.
+const MEDIA_HOST_RE = new RegExp(
+  "(^|\\.)(" +
+    [
+      "vcloud.fit",
+      "workers.dev",
+      "googleusercontent.com",
+      "r2.dev",
+      "hicine.sbs",
+    ].join("|") +
+    ")$",
+  "i"
+)
+
+function isAllowedTarget(raw: string): boolean {
+  try {
+    const u = new URL(raw)
+    if (u.protocol !== "https:" && u.protocol !== "http:") return false
+    return MEDIA_HOST_RE.test(u.hostname)
+  } catch {
+    return false
+  }
+}
 
 export async function GET(req: NextRequest) {
   if (!SIDECAR) {
@@ -15,8 +43,8 @@ export async function GET(req: NextRequest) {
 
   const mode = req.nextUrl.searchParams.get("mode") || "list"
   const url = req.nextUrl.searchParams.get("url")
-  if (!url || !/^https?:\/\//i.test(url)) {
-    return NextResponse.json({ error: "missing url" }, { status: 400 })
+  if (!url || !isAllowedTarget(url)) {
+    return NextResponse.json({ error: "url not allowed" }, { status: 403 })
   }
   const index = req.nextUrl.searchParams.get("index") ?? "0"
 

@@ -154,7 +154,7 @@ async function followChain(workerBase, type, vcloudUrl, token, trace) {
   return null
 }
 
-export default {
+const workerHandler = {
   async fetch(req) {
     const { pathname, searchParams } = new URL(req.url)
 
@@ -294,3 +294,5 @@ export default {
     return json({ error: "Not found" }, 404)
   },
 }
+
+export default workerHandler;

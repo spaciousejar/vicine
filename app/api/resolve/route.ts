@@ -195,10 +195,15 @@ async function followChain(
 
     let hopRes: Response
     try {
+      // GET instead of HEAD: hubcloud-class hosts 403 bare HEAD probes but
+      // answer normal requests. Body is discarded immediately.
       hopRes = await timedFetch(currentUrl, {
-        method: "HEAD",
+        method: "GET",
         redirect: "manual",
       })
+      try {
+        await hopRes.body?.cancel()
+      } catch {}
     } catch {
       break
     }
@@ -257,8 +262,8 @@ export async function GET(req: NextRequest) {
   }
 
   const host = parsed.hostname
-  const isWorker = WORKER_HOSTS.some((h) => host.includes(h))
-  const isVcloud = host.includes("vcloud.fit")
+  const isWorker = WORKER_HOSTS.some((h) => host.endsWith(h))
+  const isVcloud = host === "vcloud.fit" || host.endsWith(".vcloud.fit")
 
   if (!isWorker && !isVcloud) {
     return NextResponse.json({ error: "Unsupported URL host" }, { status: 400 })
@@ -297,7 +302,13 @@ export async function GET(req: NextRequest) {
     let size: unknown
     // ?debug=1 attaches per-attempt evidence to the failure payload so
     // environment-specific breakage (e.g. egress differences) is visible.
-    const debug = req.nextUrl.searchParams.get("debug") === "1"
+    const wantsDebug = req.nextUrl.searchParams.get("debug") === "1"
+    // Trace exposes internal topology; in production require the secret.
+    const debug =
+      wantsDebug &&
+      (process.env.NODE_ENV !== "production" ||
+        (process.env.DEBUG_KEY !== undefined &&
+          req.headers.get("x-debug-key") === process.env.DEBUG_KEY))
     const trace: Record<string, unknown>[] = []
 
     // Preferred path: delegate the whole chain to a Cloudflare Worker
@@ -459,7 +470,9 @@ export async function GET(req: NextRequest) {
             title: data.title,
             size: data.size,
           }
-          cachePut(cacheKey, payload)
+          // Tokens are single-use/short-lived: a long TTL here would serve
+          // dead links from cache long after the signatures expired.
+          cachePut(cacheKey, payload, 45_000)
           return NextResponse.json(payload)
         }
       }

@@ -30,6 +30,13 @@ function hashUrl(url: string): string {
   return createHash("sha1").update(url).digest("hex").slice(0, 16)
 }
 
+const MEDIA_HOST_RE = new RegExp(
+  "(^|\\.)(" +
+    ["vcloud.fit", "workers.dev", "googleusercontent.com", "r2.dev", "hicine.sbs"].join("|") +
+    ")$",
+  "i"
+);
+
 function isSafeSourceUrl(url: string): boolean {
   try {
     const u = new URL(url)
@@ -37,6 +44,7 @@ function isSafeSourceUrl(url: string): boolean {
     if (u.username || u.password) return false
     if (/^localhost$|\.local$|\.internal$/i.test(u.hostname)) return false
     if (/^[0-9.:]+$/.test(u.hostname)) return false
+    if (!MEDIA_HOST_RE.test(u.hostname)) return false
     return true
   } catch {
     return false
