@@ -28,12 +28,15 @@ function SiteHeaderInner() {
     if (q.trim()) params.set("q", q.trim())
     else params.delete("q")
     params.delete("page")
+    const watchMatch = pathname.match(/^\/watch\/(movies|anime|series)\b/)
     const base =
       pathname.startsWith("/movies") ||
       pathname.startsWith("/anime") ||
       pathname.startsWith("/series")
         ? pathname
-        : "/movies"
+        : watchMatch
+          ? "/" + watchMatch[1]
+          : "/movies"
     router.push(`${base}?${params.toString()}`)
     setOpen(false)
   }
