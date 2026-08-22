@@ -233,6 +233,28 @@ export async function fetchBySlug(
       }
     }
   }
+
+  // last resort: fresh entries often appear in /api/trending before the
+  // per-type indexes and slug endpoints know about them
+  try {
+    const res = await fetch(`${BASE_URL}/api/trending?page=1&limit=50`, {
+      next: { revalidate: 300 },
+    })
+    if (res.ok) {
+      const data: unknown = await res.json()
+      const list: MediaItem[] = Array.isArray(data) ? (data as MediaItem[]) : []
+      const found = list.find((d) => d && d.url_slug === slug)
+      if (found) {
+        const hasSeasons = Array.from({ length: 15 }).some((_, i) =>
+          Boolean(found[`season_${i + 1}`])
+        )
+        return { item: found, type: hasSeasons ? "series" : "movies" }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
   return null
 }
 

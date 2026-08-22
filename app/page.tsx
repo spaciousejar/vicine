@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 import { Suspense } from "react"
 import { SiteHeader } from "@/components/site-header"
 import { MediaGrid, MediaGridSkeleton } from "@/components/media-grid"
@@ -38,11 +39,14 @@ export default async function HomePage() {
             <div className="grid md:grid-cols-[1.1fr_0.9fr]">
               <div className="relative aspect-[16/10] overflow-hidden bg-muted md:aspect-[4/3]">
                 {heroImg ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  // LCP element: load eagerly with high fetch priority.
+                  <Image
                     src={heroImg}
                     alt={hero.title}
-                    className="h-full w-full object-cover"
+                    fill
+                    priority
+                    sizes="(max-width: 768px) 100vw, (max-width: 1280px) 55vw, 700px"
+                    className="object-cover"
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center text-muted-foreground">

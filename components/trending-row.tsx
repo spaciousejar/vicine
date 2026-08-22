@@ -20,11 +20,12 @@ export function TrendingRow({ items }: { items: MediaItem[] }) {
             <Link
               key={item._id ?? item.url_slug}
               href={`/watch/movies/${item.url_slug}`}
+              aria-label={`Number ${i + 1} trending: ${item.title}`}
               className="group relative flex shrink-0 snap-start items-end pt-8"
             >
               {/* Rank numeral */}
               <span
-                aria-hidden
+                aria-hidden="true"
                 className="pointer-events-none absolute -bottom-1 -left-3 z-10 text-[5.5rem] leading-none font-black select-none md:text-[7rem]"
                 style={{
                   WebkitTextStroke: "2px hsl(var(--primary))",

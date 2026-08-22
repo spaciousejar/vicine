@@ -152,8 +152,15 @@ export function VideoPlayer({
       <div className="overflow-hidden rounded-xl border bg-black">
         <div className="relative aspect-video w-full">
           {resolving && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black text-white">
-              <Loader2 className="size-8 animate-spin text-primary" />
+            <div
+              role="status"
+              aria-live="polite"
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black text-white"
+            >
+              <Loader2
+                className="size-8 animate-spin text-primary"
+                aria-hidden="true"
+              />
               <p className="text-sm text-muted-foreground">
                 Resolving video link…
               </p>

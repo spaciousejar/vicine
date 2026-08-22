@@ -72,8 +72,11 @@ export function SeasonEpisodes({
                         }
                         className="h-7 gap-1 text-xs"
                       >
-                        <Play className="size-3" />
+                        <Play className="size-3" aria-hidden="true" />
                         {l.quality}
+                        {failed && (
+                          <span className="sr-only">(unavailable)</span>
+                        )}
                       </Button>
                     )
                   })}
