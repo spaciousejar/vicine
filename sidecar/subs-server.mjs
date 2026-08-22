@@ -8,13 +8,18 @@
 //
 // Endpoints (all CORS-open; put nothing sensitive here):
 //   GET /health
-//   GET /list?url=<video-url>        -> { tracks: [{ index, lang, title }] }
-//   GET /extract?url=<video-url>&index=0 -> text/vtt
+//   GET /list?url=<video-url>            -> { tracks, audioTracks }
+//   GET /extract?url=<video-url>&index=0 -> text/vtt   (subtitle track)
+//   GET /audio?url=<video-url>&index=0   -> video/mp4 fMP4 stream with the
+//                                           selected audio track remuxed
+//                                           (video copied, no re-encode)
 //
-// Extracted tracks are cached on disk under os.tmpdir()/vicine-subs.
+// Extracted subtitles are cached on disk under os.tmpdir()/vicine-subs.
+// Audio remux streams are NOT cached — they pipe live.
 
 import http from "node:http"
 import { execFileFile } from "./lib/exec.mjs"
+import { spawn } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -60,7 +65,7 @@ function cachePath(url, index) {
   return path.join(CACHE_DIR, `${hash}.vtt`)
 }
 
-async function probe(url) {
+async function probe(url, select = "s") {
   const args = [
     "-v",
     "quiet",
@@ -70,7 +75,7 @@ async function probe(url) {
     "json",
     "-show_streams",
     "-select_streams",
-    "s",
+    select,
     url,
   ]
   const stdout = await execFileFile(FFPROBE, args, { timeout: TIMEOUT_MS })
@@ -80,7 +85,44 @@ async function probe(url) {
     lang: s.tags?.language || "und",
     title: s.tags?.title || "",
     codec: s.codec_name,
+    channels: s.channels,
   }))
+}
+
+// Remux video + the selected audio track into a fragmented MP4 stream.
+// Stream-copy (-c copy) keeps startup fast and CPU idle; the fMP4 header
+// is written up-front so browsers can begin playback immediately.
+async function remuxAudio(url, audioIndex, res) {
+  res.writeHead(200, {
+    "access-control-allow-origin": "*",
+    "content-type": "video/mp4",
+    "cache-control": "no-store",
+  })
+  const child = spawn(
+    FFMPEG,
+    [
+      "-nostdin",
+      "-user_agent",
+      BROWSER_UA,
+      "-i",
+      url,
+      "-map",
+      "0:v:0",
+      "-map",
+      `0:a:${audioIndex}`,
+      "-c",
+      "copy",
+      "-movflags",
+      "frag_keyframe+empty_moov",
+      "-f",
+      "mp4",
+      "pipe:1",
+    ],
+    { stdio: ["ignore", "pipe", "ignore"] }
+  )
+  child.stdout.pipe(res)
+  // Stop ffmpeg if the client disconnects.
+  res.on("close", () => child.kill("SIGKILL"))
 }
 
 async function extract(url, index, res) {
@@ -139,9 +181,22 @@ const server = http.createServer(async (req, res) => {
     if (!url) return fail(res, 400, "missing or invalid url")
 
     if (pathname === "/list") {
-      const tracks = await probe(url)
+      // Subtitle streams and audio streams in one round-trip. Audio
+      // entries carry their RELATIVE index among audio tracks (what
+      // ffmpeg's `0:a:N` mapping expects).
+      let tracks = []
+      let audioTracks = []
+      try {
+        tracks = await probe(url, "s")
+      } catch {}
+      try {
+        audioTracks = (await probe(url, "a")).map((a, relIdx) => ({
+          ...a,
+          index: relIdx,
+        }))
+      } catch {}
       cors(res)
-      return res.end(JSON.stringify({ tracks }))
+      return res.end(JSON.stringify({ tracks, audioTracks }))
     }
 
     if (pathname === "/extract") {
@@ -149,6 +204,13 @@ const server = http.createServer(async (req, res) => {
       if (!Number.isInteger(index) || index < 0)
         return fail(res, 400, "bad index")
       return await extract(url, index, res)
+    }
+
+    if (pathname === "/audio") {
+      const index = Number.parseInt(u.searchParams.get("index") || "", 10)
+      if (!Number.isInteger(index) || index < 0)
+        return fail(res, 400, "bad index")
+      return await remuxAudio(url, index, res)
     }
 
     fail(res, 404, "not found")

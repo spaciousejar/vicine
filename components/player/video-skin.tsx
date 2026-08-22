@@ -46,8 +46,6 @@ import {
   Container,
   usePlayer,
   AirPlayButton,
-  useAudioTrackOptions,
-  AudioTrackRadioGroup,
   BufferingIndicator,
   CaptionsButton,
   CaptionsRadioGroup,
@@ -116,6 +114,10 @@ export interface VideoSkinProps {
   qualities?: { id: string; label: string }[]
   activeQualityId?: string | null
   onQualityChange?: (id: string) => void
+  /** Audio tracks discovered for this source (sidecar probe). */
+  audioOptions?: { id: string; label: string }[]
+  activeAudioId?: string | null
+  onAudioChange?: (id: string) => void
 }
 
 export function VideoPlayer({
@@ -131,6 +133,9 @@ export function VideoPlayer({
   qualities,
   activeQualityId,
   onQualityChange,
+  audioOptions,
+  activeAudioId,
+  onAudioChange,
 }: VideoSkinProps): ReactNode {
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -275,6 +280,9 @@ export function VideoPlayer({
                   qualities={qualities}
                   activeQualityId={activeQualityId}
                   onQualityChange={onQualityChange}
+                  audioOptions={audioOptions}
+                  activeAudioId={activeAudioId}
+                  onAudioChange={onAudioChange}
                 />
               </div>
             </div>
@@ -393,6 +401,9 @@ interface SettingsMenuProps {
   qualities?: QualityOptionLite[]
   activeQualityId?: string | null
   onQualityChange?: (id: string) => void
+  audioOptions?: { id: string; label: string }[]
+  activeAudioId?: string | null
+  onAudioChange?: (id: string) => void
 }
 
 function SettingsMenu({
@@ -401,18 +412,19 @@ function SettingsMenu({
   qualities,
   activeQualityId,
   onQualityChange,
+  audioOptions,
+  activeAudioId,
+  onAudioChange,
 }: SettingsMenuProps): ReactNode {
   const t = useTranslator()
   const playbackRate = usePlaybackRateOptions()
   const quality = useQualityOptions()
-  const audioTrack = useAudioTrackOptions()
   const captions = useCaptionsOptions()
   const hasPlaybackRate = playbackRate?.state.availability === "available"
   const hasQuality = quality?.state.availability === "available"
-  const hasAudioTrack = audioTrack?.state.availability === "available"
   const hasCaptions = captions?.state.availability === "available"
 
-  if (!hasPlaybackRate && !hasQuality && !hasAudioTrack && !hasCaptions)
+  if (!hasPlaybackRate && !hasQuality && !hasCaptions)
     return null
 
   return (
@@ -601,7 +613,7 @@ function SettingsMenu({
             </Menu.Root>
           ) : null}
 
-          {hasAudioTrack ? (
+          {audioOptions && audioOptions.length > 1 ? (
             <Menu.Root>
               <Menu.Trigger
                 className="media-menu__item media-menu__item--submenu"
@@ -611,7 +623,7 @@ function SettingsMenu({
                     <span>{t(audioText)}</span>
                     <span className="media-menu__hint">
                       <bdi dir="auto" className="media-menu__hint-label">
-                        {audioTrack.selectedLabel}
+                        {audioOptions.find((a) => a.id === activeAudioId)?.label ?? audioOptions[0].label}
                       </bdi>
                       <MenuChevron />
                     </span>
@@ -624,22 +636,26 @@ function SettingsMenu({
                   {t(audioText)}
                 </Menu.Item>
                 <Menu.Separator className="media-menu__separator" />
-                <AudioTrackRadioGroup
+                <Menu.RadioGroup
                   className="media-menu__group"
                   aria-label={t(audioText)}
-                  renderItem={(props, item) => (
-                    <Menu.RadioItem {...props} className="media-menu__item">
-                      <bdi dir="auto">{item.label}</bdi>
-                      <Menu.ItemIndicator
-                        checked={item.checked}
-                        forceMount
-                        className="media-menu__indicator"
-                      >
+                  value={activeAudioId ?? ""}
+                  onValueChange={(value) => onAudioChange?.(value)}
+                >
+                  {audioOptions.map((a) => (
+                    <Menu.RadioItem
+                      key={a.id}
+                      className="media-menu__item"
+                      value={a.id}
+                      onSelect={() => onAudioChange?.(a.id)}
+                    >
+                      <bdi dir="auto">{a.label}</bdi>
+                      <Menu.ItemIndicator forceMount className="media-menu__indicator">
                         <CheckIcon className="media-icon" />
                       </Menu.ItemIndicator>
                     </Menu.RadioItem>
-                  )}
-                />
+                  ))}
+                </Menu.RadioGroup>
               </Menu.Content>
             </Menu.Root>
           ) : null}

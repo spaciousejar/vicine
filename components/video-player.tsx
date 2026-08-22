@@ -106,6 +106,12 @@ export function VideoPlayer({
   // /api/subs. Embedded entries start with src="" and extract on demand;
   // pendingSub tracks that in-flight request.
   const [subs, setSubs] = useState<SubtitleTrack[]>([])
+  // Audio switcher: sidecar-discovered tracks; selecting a non-default
+  // one swaps the source to a remuxed stream (video + chosen audio).
+  const [audioOptions, setAudioOptions] = useState<
+    { id: string; label: string }[]
+  >([])
+  const [activeAudioId, setActiveAudioId] = useState("default")
   const [pendingSub, setPendingSub] = useState<string | null>(null)
 
   const [prevUrl, setPrevUrl] = useState(url)
@@ -332,10 +338,23 @@ export function VideoPlayer({
 
   const playSrc = useMemo(() => {
     if (!videoUrl) return null
+    // Non-default audio selected: sidecar remuxes video + chosen track.
+    if (activeAudioId !== "default") {
+      return `/api/subs?mode=audio&url=${encodeURIComponent(videoUrl)}&index=${activeAudioId}`
+    }
     if (HLS_EXT.test(videoUrl)) return videoUrl
     if (!useHlsProxy) return videoUrl
     return `/api/stream/direct/index.m3u8?url=${encodeURIComponent(videoUrl)}`
-  }, [videoUrl, useHlsProxy])
+  }, [videoUrl, useHlsProxy, activeAudioId])
+
+  function handleAudioChange(id: string) {
+    if (id === activeAudioId) return
+    const v = document.querySelector<HTMLVideoElement>(
+      ".media-default-skin video"
+    )
+    if (v && Number.isFinite(v.currentTime)) resumeAtRef.current = v.currentTime
+    setActiveAudioId(id)
+  }
 
   // Live adaptation in Auto mode: repeated buffering steps the quality
   // down; long smooth playback allows stepping up (throttled).
@@ -515,30 +534,48 @@ export function VideoPlayer({
     }
   }, [playSrc])
 
-  // Ask the sidecar (via /api/subs) what subtitle streams the file carries.
+  // Ask the sidecar (via /api/subs) what subtitle and audio streams the
+  // file carries. Dual-audio sources expose a switchable audio menu.
   useEffect(() => {
     if (!videoUrl || HLS_EXT.test(videoUrl)) return
     let cancelled = false
     fetch(`/api/subs?mode=list&url=${encodeURIComponent(videoUrl)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (cancelled || !data?.tracks?.length) return
-        setSubs((prev) => [
-          ...prev,
-          ...data.tracks
-            .filter((t: { index: number }) => typeof t.index === "number")
-            .map(
-              (t: { index: number; lang?: string; title?: string }) =>
-                ({
-                  id: `emb-${t.index}-${Date.now()}`,
-                  label: `Embedded · ${t.title || t.lang || `track ${t.index}`}`,
-                  lang: t.lang || "und",
-                  src: "", // extracted lazily when selected
-                  embedded: true,
-                  index: t.index,
-                }) satisfies SubtitleTrack
-            ),
-        ])
+        if (cancelled) return
+
+        if (data?.tracks?.length) {
+          setSubs((prev) => [
+            ...prev,
+            ...data.tracks
+              .filter((t: { index: number }) => typeof t.index === "number")
+              .map(
+                (t: { index: number; lang?: string; title?: string }) =>
+                  ({
+                    id: `emb-${t.index}-${Date.now()}`,
+                    label: `Embedded · ${t.title || t.lang || `track ${t.index}`}`,
+                    lang: t.lang || "und",
+                    src: "", // extracted lazily when selected
+                    embedded: true,
+                    index: t.index,
+                  }) satisfies SubtitleTrack
+              ),
+          ])
+        }
+
+        if (data?.audioTracks?.length > 1) {
+          const opts = data.audioTracks.map(
+            (a: { index: number; lang?: string; title?: string }) => ({
+              id: String(a.index),
+              label:
+                a.title ||
+                (a.lang && a.lang !== "und"
+                  ? a.lang.toUpperCase()
+                  : `Track ${a.index + 1}`),
+            })
+          )
+          setAudioOptions([{ id: "default", label: "Original" }, ...opts])
+        }
       })
       .catch(() => {})
     return () => {
@@ -715,6 +752,9 @@ export function VideoPlayer({
                   : null
               }
               onAddSubtitleFiles={handleSubtitleFiles}
+              audioOptions={audioOptions}
+              activeAudioId={activeAudioId}
+              onAudioChange={handleAudioChange}
               qualities={menuQualities}
               activeQualityId={autoMode ? "auto" : url}
               onQualityChange={handleQualityMenu}
