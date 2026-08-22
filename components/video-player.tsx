@@ -534,6 +534,27 @@ export function VideoPlayer({
     }
   }, [playSrc])
 
+  // Warm embedded-subtitle extraction in the background once discovered:
+  // the sidecar caches results, so selecting a track later is instant.
+  const prefetchedSubRef = useRef(false)
+  useEffect(() => {
+    if (!videoUrl || HLS_EXT.test(videoUrl)) return
+    const t = setTimeout(() => {
+      fetch(`/api/subs?mode=list&url=${encodeURIComponent(videoUrl)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const first = data?.tracks?.[0]
+          if (!first || prefetchedSubRef.current) return
+          prefetchedSubRef.current = true
+          fetch(
+            `/api/subs?mode=extract&url=${encodeURIComponent(videoUrl)}&index=${first.index}`
+          ).catch(() => {})
+        })
+        .catch(() => {})
+    }, 4000)
+    return () => clearTimeout(t)
+  }, [videoUrl])
+
   // Ask the sidecar (via /api/subs) what subtitle and audio streams the
   // file carries. Dual-audio sources expose a switchable audio menu.
   useEffect(() => {

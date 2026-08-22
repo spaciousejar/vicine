@@ -110,15 +110,27 @@ async function remuxAudio(url, audioIndex, res) {
       "0:v:0",
       "-map",
       `0:a:${audioIndex}`,
-      "-c",
+      // Video stream-copies; E-AC3/DTS cannot copy into MP4 ("Cannot
+      // write moov atom before EAC3 packets parsed"), so the selected
+      // track transcodes to AAC — cheap relative to video.
+      "-c:v",
       "copy",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "192k",
+      "-ac",
+      "2",
       "-movflags",
       "frag_keyframe+empty_moov",
       "-f",
       "mp4",
       "pipe:1",
     ],
-    { stdio: ["ignore", "pipe", "ignore"] }
+    { stdio: ["ignore", "pipe", "pipe"] }
+  )
+  child.stderr.on("data", (d) =>
+    process.stderr.write("[remux] " + String(d).slice(-300))
   )
   child.stdout.pipe(res)
   // Stop ffmpeg if the client disconnects.
