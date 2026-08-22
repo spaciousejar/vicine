@@ -56,24 +56,41 @@ function looksPlayable(res) {
   return true
 }
 
-async function isPlayable(url) {
+async function isPlayable(url, trace) {
   if (!isSafeHopUrl(url)) return false
+  const probe = { candidate: url.slice(0, 90) }
   try {
     const res = await timedFetch(url, { method: "HEAD", redirect: "follow" })
-    // Some CDNs reject HEAD outright; a ranged GET is the authoritative check.
-    if (!looksPlayable(res)) {
-      const g = await timedFetch(url, {
-        method: "GET",
-        headers: { range: "bytes=0-1023" },
-        redirect: "follow",
-      })
-      try {
-        g.body?.cancel()
-      } catch {}
-      return looksPlayable(g)
+    probe.headStatus = res.status
+    probe.headCt = res.headers.get("content-type")
+    if (looksPlayable(res)) {
+      trace?.push({ ...probe, verdict: "head-ok" })
+      return true
     }
-    return true
-  } catch {
+  } catch (e) {
+    probe.headErr = String(e).slice(0, 90)
+  }
+  // Some CDNs reject HEAD outright; a ranged GET is the authoritative check.
+  try {
+    const g = await timedFetch(url, {
+      method: "GET",
+      headers: { range: "bytes=0-1023" },
+      redirect: "follow",
+    })
+    probe.getStatus = g.status
+    probe.getCt = g.headers.get("content-type")
+    try {
+      await g.body?.cancel()
+    } catch {}
+    const ok = looksPlayable(g)
+    trace?.push({ ...probe, verdict: ok ? "get-ok" : "get-reject" })
+    return ok
+  } catch (e) {
+    trace?.push({
+      ...probe,
+      getErr: String(e).slice(0, 90),
+      verdict: "get-err",
+    })
     return false
   }
 }
@@ -221,7 +238,7 @@ export default {
               trace
             )
             if (!r) throw new Error(`chain failed for ${type}`)
-            if (!r.verified && !(await isPlayable(r.url)))
+            if (!r.verified && !(await isPlayable(r.url, trace)))
               throw new Error(`unplayable candidate for ${type}`)
             return r.url
           })
