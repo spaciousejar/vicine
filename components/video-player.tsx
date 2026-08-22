@@ -73,6 +73,11 @@ export function VideoPlayer({
   // Sources already attempted during auto-descend, so failures cascade
   // downward without looping.
   const triedUrlsRef = useRef<Set<string>>(new Set())
+  // Hard cap on total failure-handling passes: guarantees the fallback
+  // chain terminates even if dev double-invocation or repeated silent
+  // source failures would otherwise loop.
+  const failureCountRef = useRef(0)
+  const titleKeyRef = useRef<string | null>(null)
   // Where Auto mode would place us on this title (null = already there).
   const tierTargetUrl = useMemo(() => {
     if (!variants || variants.length < 2) return null
@@ -132,6 +137,14 @@ export function VideoPlayer({
   useEffect(() => {
     triedUrlsRef.current = new Set(url ? [url] : [])
   }, [url])
+
+  const variantsTitleKey = variants?.[0]?.url ?? null
+  useEffect(() => {
+    if (variantsTitleKey !== titleKeyRef.current) {
+      titleKeyRef.current = variantsTitleKey
+      failureCountRef.current = 0
+    }
+  }, [variantsTitleKey])
 
   useEffect(() => {
     if (!url) return
@@ -384,6 +397,72 @@ export function VideoPlayer({
     }
   }, [playSrc, autoMode, url, qualityOptions])
 
+  // Black-screen detector: some sources (x265/10-bit MKV rips) play audio
+  // while the video codec silently fails — no error event is raised, so
+  // the normal fallback chain never triggers. If playback starts but no
+  // video frame (or zero dimensions) materializes, treat it as a failure.
+  const handlerRef = useRef(handlePlayerError)
+  useEffect(() => {
+    handlerRef.current = handlePlayerError
+  })
+  useEffect(() => {
+    if (!playSrc) return
+    let cancelled = false
+    let armed = false
+    let gotFrame = false
+    const v = document.querySelector<HTMLVideoElement>(
+      ".media-default-skin video"
+    )
+    if (!v) return
+
+    const fail = () => {
+      if (!cancelled && !gotFrame) {
+        cancelled = true
+        handlerRef.current()
+      }
+    }
+    const arm = () => {
+      if (armed || cancelled) return
+      armed = true
+      if (v.videoWidth === 0) {
+        // No decodable video track at all.
+        setTimeout(fail, 400)
+        return
+      }
+      const rvfc = (
+        v as HTMLVideoElement & {
+          requestVideoFrameCallback?: (cb: () => void) => number
+        }
+      ).requestVideoFrameCallback
+      if (rvfc) {
+        rvfc.call(v, () => {
+          gotFrame = true
+        })
+        setTimeout(fail, 5000)
+      }
+      // Without requestVideoFrameCallback (Firefox) we rely on the
+      // zero-dimension check and native error events.
+    }
+
+    // Source-level failures that never reach onError (manifest fetches
+    // failing repeatedly, hung loads): if playback never reaches data,
+    // terminate the chain.
+    const stuckTimer = setTimeout(() => {
+      if (!cancelled && !gotFrame && v.readyState < 2) fail()
+    }, 10_000)
+
+    v.addEventListener("loadedmetadata", arm)
+    v.addEventListener("playing", arm)
+    v.addEventListener("error", fail)
+    return () => {
+      cancelled = true
+      clearTimeout(stuckTimer)
+      v.removeEventListener("loadedmetadata", arm)
+      v.removeEventListener("playing", arm)
+      v.removeEventListener("error", fail)
+    }
+  }, [playSrc])
+
   // Restore the playback position after an in-player quality switch.
   useEffect(() => {
     if (!playSrc || resumeAtRef.current === null) return
@@ -515,6 +594,13 @@ export function VideoPlayer({
   })
 
   function handlePlayerError() {
+    failureCountRef.current += 1
+    const cap = Math.max(6, (variants?.length ?? 0) * 2 + 4)
+    if (failureCountRef.current > cap) {
+      setError(true)
+      setResolving(false)
+      return
+    }
     const media = document.querySelector<HTMLVideoElement>(
       ".media-default-skin video"
     )
