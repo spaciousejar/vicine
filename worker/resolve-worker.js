@@ -238,8 +238,18 @@ export default {
               trace
             )
             if (!r) throw new Error(`chain failed for ${type}`)
-            if (!r.verified && !(await isPlayable(r.url, trace)))
-              throw new Error(`unplayable candidate for ${type}`)
+            // dl.php extractions are high-trust final links; datacenter-side
+            // probes can be rejected by CDNs even when the URL serves fine.
+            // Return them unverified rather than losing working sources.
+            if (!r.verified && !r.url.includes("dl.php")) {
+              if (!(await isPlayable(r.url, trace)))
+                throw new Error(`unplayable candidate for ${type}`)
+            } else if (!r.verified) {
+              trace?.push({
+                candidate: r.url.slice(0, 90),
+                verdict: "trusted-dlphp",
+              })
+            }
             return r.url
           })
         )
