@@ -68,9 +68,18 @@ export function WatchInnerClient({
   // Sources that failed to resolve — surfaced as unavailable so users stop
   // clicking known-dead links.
   const [failedUrls, setFailedUrls] = useState<string[]>([])
+  // For series/anime, the quality menu is scoped to the episode being
+  // played; movies use the full link list.
+  const initialEpisodeVariants = (firstEpisode?.links ?? [])
+    .slice()
+    .sort(
+      (a, b) => qualityScore(`x${b.quality}`) - qualityScore(`x${a.quality}`)
+    )
+    .map((l) => ({ url: l.url, label: l.quality }))
+  const [episodeVariants, setEpisodeVariants] = useState(initialEpisodeVariants)
 
-  // Every playable source for this title, for the in-player quality menu
-  // (best first).
+  // Every playable source for this title — used by the in-player quality
+  // menu for movies, and as the lookup for labels when episodes switch.
   const allVariants = (
     type === "movies"
       ? movieLinks.map((l) => ({
@@ -95,9 +104,14 @@ export function WatchInnerClient({
     setFailedUrls((prev) => (prev.includes(u) ? prev : [...prev, u]))
   }
 
-  function play(u: string, l: string) {
+  function play(
+    u: string,
+    l: string,
+    links?: { label: string; url: string }[]
+  ) {
     setUrl(u)
     setLabel(l)
+    if (links) setEpisodeVariants(links)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
@@ -121,7 +135,9 @@ export function WatchInnerClient({
             <VideoPlayer
               url={url}
               label={label}
-              variants={allVariants}
+              variants={
+                type === "movies" ? allVariants : (episodeVariants ?? [])
+              }
               onUrlChange={(u) => {
                 setUrl(u)
                 const variant = allVariants.find((v) => v.url === u)

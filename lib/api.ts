@@ -138,21 +138,41 @@ export function parseSeasonString(
     if (!epMatch) continue
     const epNum = parseInt(epMatch[1], 10)
     const afterColon = line.slice(line.indexOf(":") + 1)
-    // split by ,, -> each quality chunk
-    const chunks = afterColon
+    const tokens = afterColon
       .split(",,")
       .map((c) => c.trim())
       .filter(Boolean)
+
+    // Format: URL1,,Q2 : URL2,,Q3 : URL3,,Qn — each quality label after
+    // the ",," belongs to the PREVIOUS url; a bare trailing quality
+    // closes the last one. Some sources instead prefix the quality
+    // ("480p : URL"), which is handled too.
     const links: { quality: string; url: string }[] = []
-    for (const chunk of chunks) {
-      const urlMatch = chunk.match(/(https?:\/\/\S+)/)
-      if (!urlMatch) continue
-      const url = urlMatch[1].replace(/,+$/, "")
-      // quality hint is either before URL or after
-      const qualityMatch = chunk.match(/(480p|720p|1080p|2160p)/i)
-      const quality = qualityMatch ? qualityMatch[1] : "auto"
-      links.push({ quality, url })
+    let pendingUrl: string | null = null
+    const pushLink = (url: string | null, quality: string) => {
+      if (!url) return
+      links.push({ quality: quality || "auto", url })
     }
+    for (const tok of tokens) {
+      const urlMatch = tok.match(/(https?:\/\/[^\s,]+)/)
+      const qualityMatch = tok.match(/\b(\d{3,4}p)\b/i)
+      if (urlMatch) {
+        if (pendingUrl) {
+          // The leading quality (if any) describes the pending URL.
+          pushLink(pendingUrl, qualityMatch?.[1] ?? "")
+        } else if (qualityMatch) {
+          // Quality prefixed in the same token ("480p : URL").
+          pushLink(urlMatch[1], qualityMatch[1])
+        }
+        pendingUrl = qualityMatch && !pendingUrl ? null : urlMatch[1]
+      } else {
+        // Pure quality token closes the pending URL.
+        pushLink(pendingUrl, qualityMatch?.[1] ?? "")
+        pendingUrl = null
+      }
+    }
+    pushLink(pendingUrl, "")
+
     if (links.length > 0) {
       episodes.push({ episode: epNum, links, raw: line })
     }

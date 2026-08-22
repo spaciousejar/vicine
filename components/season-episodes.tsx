@@ -13,7 +13,11 @@ export function SeasonEpisodes({
   failedUrls = [],
 }: {
   seasons: ParsedSeason[]
-  onPlay: (url: string, label: string) => void
+  onPlay: (
+    url: string,
+    label: string,
+    episodeLinks?: { label: string; url: string }[]
+  ) => void
   // URLs that already failed to resolve — their quality buttons render dead.
   failedUrls?: string[]
 }) {
@@ -67,7 +71,18 @@ export function SeasonEpisodes({
                         onClick={() =>
                           onPlay(
                             l.url,
-                            `S${s.season} E${ep.episode} — ${l.quality}`
+                            `S${s.season} E${ep.episode} — ${l.quality}`,
+                            ep.links
+                              .slice()
+                              .sort((a, b) => {
+                                const pa = parseInt(a.quality, 10) || 0
+                                const pb = parseInt(b.quality, 10) || 0
+                                return pb - pa
+                              })
+                              .map((x) => ({
+                                label: x.quality,
+                                url: x.url,
+                              }))
                           )
                         }
                         className="h-7 gap-1 text-xs"
