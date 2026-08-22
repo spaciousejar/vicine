@@ -46,6 +46,25 @@ export function WatchInnerClient({
   // clicking known-dead links.
   const [failedUrls, setFailedUrls] = useState<string[]>([])
 
+  // Every playable source for this title, for the in-player quality menu.
+  const allVariants = (
+    type === "movies"
+      ? movieLinks.map((l) => ({
+          url: l.url,
+          label: `${l.label}${l.size ? ` [${l.size}]` : ""}`,
+          text: `${l.label}${l.size ? ` • ${l.size}` : ""}`,
+        }))
+      : seasons.flatMap((s) =>
+          s.episodes.flatMap((ep) =>
+            ep.links.map((l) => ({
+              url: l.url,
+              label: `S${s.season}E${ep.episode} ${l.quality}`,
+              text: `S${s.season} E${ep.episode} — ${l.quality}`,
+            }))
+          )
+        )
+  ).filter((v) => !failedUrls.includes(v.url))
+
   function markUnresolved(u: string) {
     setFailedUrls((prev) => (prev.includes(u) ? prev : [...prev, u]))
   }
@@ -76,6 +95,12 @@ export function WatchInnerClient({
             <VideoPlayer
               url={url}
               label={label}
+              variants={allVariants}
+              onUrlChange={(u) => {
+                setUrl(u)
+                const variant = allVariants.find((v) => v.url === u)
+                if (variant?.text) setLabel(variant.text)
+              }}
               onUnresolved={markUnresolved}
             />
 
