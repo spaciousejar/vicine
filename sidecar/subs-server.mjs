@@ -194,6 +194,87 @@ async function extract(url, index, res, key) {
   fs.createReadStream(cached).pipe(res)
 }
 
+
+// Full link-resolution from the residential network: upstream hosts block
+// datacenter egress, so this box is the only place the whole chain works.
+async function resolveChain(workerBase, vcloudUrl) {
+  const linksRes = await fetch(
+    `${workerBase}/api/links?vcloud=${encodeURIComponent(vcloudUrl)}`,
+    { headers: { "user-agent": BROWSER_UA }, signal: AbortSignal.timeout(15000) }
+  )
+  if (!linksRes.ok) throw new Error(`links ${linksRes.status}`)
+  const data = await linksRes.json()
+  const tokens = Object.entries(data.tokens || {}).filter(
+    ([, t]) => t && t.ts && t.sig
+  )
+
+  const follow = async ([type, t]) => {
+    let u = `${workerBase}/go?type=${type}&vcloud=${encodeURIComponent(vcloudUrl)}&ts=${t.ts}&sig=${t.sig}`
+    for (let hop = 0; hop < 6; hop++) {
+      const r = await fetch(u, {
+        redirect: "manual",
+        method: "GET",
+        headers: { "user-agent": BROWSER_UA },
+        signal: AbortSignal.timeout(20000),
+      })
+      try { await r.body?.cancel() } catch {}
+      if (r.status >= 300 && r.status < 400) {
+        const next = r.headers.get("location")
+        if (!next) throw new Error("no location")
+        u = new URL(next, u).toString()
+        // dl.php wraps the real link in its query param
+        const parsed = new URL(u)
+        if (parsed.pathname.endsWith("dl.php")) {
+          const link = parsed.searchParams.get("link")
+          if (link) return link
+        }
+        continue
+      }
+      return u
+    }
+    throw new Error("too many hops")
+  }
+
+  const attempts = tokens.map(async ([type, t]) => {
+    const finalUrl = await follow([type, t])
+    // Verify playability (HEAD then ranged GET fallback).
+    let ok = false
+    try {
+      const h = await fetch(finalUrl, {
+        method: "HEAD",
+        headers: { "user-agent": BROWSER_UA },
+        signal: AbortSignal.timeout(15000),
+      })
+      ok =
+        (h.status === 200 || h.status === 206) &&
+        !/^text\/html/i.test(h.headers.get("content-type") ?? "")
+    } catch {}
+    if (!ok) {
+      const g = await fetch(finalUrl, {
+        method: "GET",
+        headers: { "user-agent": BROWSER_UA, range: "bytes=0-1023" },
+        signal: AbortSignal.timeout(15000),
+      })
+      try { await g.body?.cancel() } catch {}
+      ok =
+        (g.status === 200 || g.status === 206) &&
+        !/^text\/html/i.test(g.headers.get("content-type") ?? "")
+    }
+    if (!ok) throw new Error(`unplayable ${type}`)
+    return { type, url: finalUrl }
+  })
+
+  const results = await Promise.allSettled(attempts)
+  const winner = results.find((r) => r.status === "fulfilled")
+  if (!winner) throw new Error("all mirrors failed")
+  return {
+    videoUrl: winner.value.url,
+    title: data.title,
+    size: data.size,
+  }
+}
+
+
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, "http://x")
   const pathname = u.pathname
@@ -208,6 +289,22 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (pathname === "/health") return (cors(res), res.end('{"ok":true}'))
+
+    if (pathname === "/resolve") {
+      const target = safeUrl(u.searchParams.get("url") || "")
+      if (!target) return fail(res, 400, "missing or invalid url")
+      try {
+        const out = await resolveChain(
+          "https://quiet-lab-41f9.yolku.workers.dev",
+          target
+        )
+        cors(res)
+        return res.end(JSON.stringify(out))
+      } catch (e) {
+        fail(res, 502, String(e.message || e).slice(0, 160))
+        return
+      }
+    }
 
     const url = safeUrl(u.searchParams.get("url") || "")
     if (!url) return fail(res, 400, "missing or invalid url")

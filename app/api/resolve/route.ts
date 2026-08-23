@@ -316,6 +316,33 @@ export async function GET(req: NextRequest) {
     // but a worker on a custom domain sometimes passes where platforms
     // can't. On failure we fall through to the local chain and finally the
     // browser-traversed /go fallback.
+    const sidecar = process.env.SUBS_SIDECAR_URL
+    if (sidecar) {
+      try {
+        const res2 = await timedFetch(
+          `${sidecar.replace(/\/+$/, "")}/resolve?url=${encodeURIComponent(url)}${debug ? "&debug=1" : ""}`,
+          undefined,
+          RESOLVE_BUDGET_MS + 2000
+        )
+        const data = (await res2.json()) as {
+          videoUrl?: string
+          title?: unknown
+          size?: unknown
+        }
+        if (res2.ok && data.videoUrl) {
+          const payload = {
+            videoUrl: data.videoUrl,
+            title: data.title,
+            size: data.size,
+          }
+          cachePut(cacheKey, payload)
+          return NextResponse.json(payload)
+        }
+      } catch {
+        // sidecar resolver unreachable — fall through
+      }
+    }
+
     const remoteBase = process.env.RESOLVE_WORKER_URL
     if (remoteBase) {
       try {
