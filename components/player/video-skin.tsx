@@ -516,16 +516,7 @@ function SettingsMenu({
               <SpinnerIcon className="media-icon" />
               <span>Extracting “{extractingLabel}”…</span>
             </div>
-          ) : (
-            <Menu.Item
-              className="media-menu__item"
-              onSelect={() => {
-                setTimeout(() => onLoadSubtitleFiles(), 0)
-              }}
-            >
-              Load subtitle file…
-            </Menu.Item>
-          )}
+          ) : null}
 
           {hasCaptions ? (
             <Menu.Root>
