@@ -71,3 +71,46 @@ export async function filesToSubtitleTracks(
   }
   return out
 }
+
+/**
+ * Incremental WebVTT parser for streamed extractions: feed raw chunks,
+ * receive parsed cues as they complete across chunk boundaries.
+ */
+export function createCueStreamParser(
+  onCue: (cue: { start: number; end: number; text: string }) => void
+): { push: (chunk: string) => void } {
+  let buf = ""
+  const toSeconds = (s: string): number | null => {
+    const m = s.trim().match(/(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})/)
+    if (!m) return null
+    return (
+      (Number(m[1] ?? 0) || 0) * 3600 +
+      Number(m[2]) * 60 +
+      Number(m[3]) +
+      Number(m[4]) / 1000
+    )
+  }
+  return {
+    push(chunk: string) {
+      buf += chunk
+      let idx: number
+      while ((idx = buf.search(/\r?\n\r?\n/)) !== -1) {
+        const block = buf.slice(0, idx)
+        buf = buf.slice(idx).replace(/^\r?\n\r?\n/, "")
+        const lines = block.split(/\r?\n/)
+        const ti = lines.findIndex((l) => l.includes("-->"))
+        if (ti === -1) continue
+        const [a, b] = lines[ti].split("-->")
+        const start = toSeconds(a)
+        const end = toSeconds(b)
+        if (start === null || end === null) continue
+        const text = lines
+          .slice(ti + 1)
+          .join("\n")
+          .replace(/<[^>]+>/g, "")
+          .trim()
+        if (text) onCue({ start, end, text })
+      }
+    },
+  }
+}

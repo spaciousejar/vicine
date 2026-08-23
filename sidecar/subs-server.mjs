@@ -239,6 +239,90 @@ const server = http.createServer(async (req, res) => {
       return await extract(url, index, res, key.slice(0, 300))
     }
 
+
+    if (pathname === "/extract-stream") {
+      const index = Number.parseInt(u.searchParams.get("index") || "", 10)
+      if (!Number.isInteger(index) || index < 0)
+        return fail(res, 400, "bad index")
+      const key = (u.searchParams.get("key") || "").slice(0, 300)
+
+      // Serve a completed cached extraction instantly when available.
+      const cachedPath = cachePath(key, url, index)
+      if (fs.existsSync(cachedPath)) {
+        cors(res, "text/vtt")
+        return fs.createReadStream(cachedPath).pipe(res)
+      }
+
+      res.writeHead(200, {
+        "access-control-allow-origin": "*",
+        "content-type": "text/vtt",
+        "cache-control": "no-store",
+      })
+      // ffmpeg's webvtt output is block-buffered on pipes (cues would sit
+      // in stdio until exit), so write to a file and tail it to the client
+      // as it grows. On clean completion the .part promotes to cache.
+      const tmp = `${cachePath(key, url, index)}.${process.pid}.part`
+      const child = spawn(
+        FFMPEG,
+        [
+          "-nostdin",
+          "-user_agent", BROWSER_UA,
+          "-i", url,
+          "-map", `0:${index}`,
+          "-flush_packets", "1",
+          "-f", "webvtt",
+          "-y", tmp,
+        ],
+        { stdio: ["ignore", "ignore", "pipe"] }
+      )
+      child.stderr.on("data", (d) =>
+        process.stderr.write("[extract-stream] " + String(d).slice(-300))
+      )
+
+      let sent = 0
+      let finished = false
+      const finish = (code) => {
+        if (finished) return
+        finished = true
+        clearInterval(poll)
+        try { res.end(); } catch {}
+        if (code === 0 && sent > 0) {
+          try { fs.renameSync(tmp, cachePath(key, url, index)); } catch {}
+        } else {
+          try { fs.unlinkSync(tmp); } catch {}
+        }
+        console.log(`[extract-stream] exited code=${code} sent=${sent}B`)
+      }
+
+      // Tail as the file grows: each tick reads whatever appeared past the
+      // last sent offset.
+      const poll = setInterval(() => {
+        try {
+          if (!fs.existsSync(tmp)) return
+          const size = fs.statSync(tmp).size
+          if (size <= sent) return
+          const fd = fs.openSync(tmp, "r")
+          const buf = Buffer.alloc(size - sent)
+          fs.readSync(fd, buf, 0, buf.length, sent)
+          fs.closeSync(fd)
+          res.write(buf)
+          sent += buf.length
+        } catch {}
+      }, 200)
+
+      child.on("close", (code) => {
+        // give the tail a beat to drain the last flush
+        setTimeout(() => finish(code ?? 1), 300)
+      })
+      res.on("close", () => {
+        finished = true
+        clearInterval(poll)
+        child.kill("SIGKILL")
+        try { fs.unlinkSync(tmp); } catch {}
+      })
+      return
+    }
+
     if (pathname === "/audio") {
       const index = Number.parseInt(u.searchParams.get("index") || "", 10)
       if (!Number.isInteger(index) || index < 0)

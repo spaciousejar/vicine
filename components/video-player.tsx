@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ExternalLink, Play, Copy, Check, Loader2 } from "lucide-react"
 import { VideoPlayer as VideoSkin } from "@/components/player/video-skin"
-import { filesToSubtitleTracks, type SubtitleTrack } from "@/lib/subtitles"
+import {
+  filesToSubtitleTracks,
+  createCueStreamParser,
+  type SubtitleTrack,
+} from "@/lib/subtitles"
 
 const HLS_EXT = /\.m3u8($|\?)/i
 
@@ -87,8 +91,7 @@ export function VideoPlayer({
   // SSR — client components still pre-render on the server.
   // QA hatch disabled in production builds (content-injection surface).
   const [vsrcOverride] = useState(() =>
-    typeof window === "undefined" ||
-    process.env.NODE_ENV === "production"
+    typeof window === "undefined" || process.env.NODE_ENV === "production"
       ? null
       : new URLSearchParams(window.location.search).get("vsrc")
   )
@@ -138,7 +141,12 @@ export function VideoPlayer({
   >([])
   const [activeAudioId, setActiveAudioId] = useState("default")
   const [pendingSub, setPendingSub] = useState<string | null>(null)
-
+  const pendingSubRef = useRef<string | null>(null)
+  useEffect(() => {
+    pendingSubRef.current = pendingSub
+  })
+  // Abort controllers for live cue-stream ingestion, per track id.
+  const liveStreamsRef = useRef<Map<string, AbortController>>(new Map())
 
   const [prevUrl, setPrevUrl] = useState(url)
   // Keep the latest callback in a ref so the resolve effect doesn't re-run
@@ -164,6 +172,8 @@ export function VideoPlayer({
     setPendingSub(null)
     setAudioOptions([])
     setActiveAudioId("default")
+    for (const ac of liveStreamsRef.current.values()) ac.abort()
+    liveStreamsRef.current.clear()
   }
 
   // External source change resets the auto-descend ledger so failures
@@ -400,53 +410,54 @@ export function VideoPlayer({
       if (cancelled || !mediaEl) return
       const v = mediaEl
 
-    const currentIdx = qualityOptions.findIndex((o) => o.id === url)
-    if (currentIdx === -1) return // mirror/interstitial source — skip
+      const currentIdx = qualityOptions.findIndex((o) => o.id === url)
+      if (currentIdx === -1) return // mirror/interstitial source — skip
 
-    const trySwitch = (idx: number) => {
-      if (Date.now() - lastSwitchRef.current < 5000) return
-      const target = qualityOptions[idx]
-      if (!target || target.id === url) return
-      lastSwitchRef.current = Date.now()
-      stallRef.current = { count: 0, windowStart: 0 }
-      healthySinceRef.current = null
-      if (v && Number.isFinite(v.currentTime))
-        resumeAtRef.current = v.currentTime
-      setResolveAttempt(0)
-      onUrlChangeRef.current?.(target.id)
-    }
+      const trySwitch = (idx: number) => {
+        if (Date.now() - lastSwitchRef.current < 5000) return
+        const target = qualityOptions[idx]
+        if (!target || target.id === url) return
+        lastSwitchRef.current = Date.now()
+        stallRef.current = { count: 0, windowStart: 0 }
+        healthySinceRef.current = null
+        if (v && Number.isFinite(v.currentTime))
+          resumeAtRef.current = v.currentTime
+        setResolveAttempt(0)
+        onUrlChangeRef.current?.(target.id)
+      }
 
-    const onWaiting = () => {
-      const now = Date.now()
-      if (now - stallRef.current.windowStart > 10_000) {
-        stallRef.current = { count: 0, windowStart: now }
+      const onWaiting = () => {
+        const now = Date.now()
+        if (now - stallRef.current.windowStart > 10_000) {
+          stallRef.current = { count: 0, windowStart: now }
+        }
+        stallRef.current.count += 1
+        if (
+          stallRef.current.count >= 3 &&
+          currentIdx < qualityOptions.length - 1
+        ) {
+          trySwitch(currentIdx + 1)
+        }
       }
-      stallRef.current.count += 1
-      if (
-        stallRef.current.count >= 3 &&
-        currentIdx < qualityOptions.length - 1
-      ) {
-        trySwitch(currentIdx + 1)
+      const onPlaying = () => {
+        if (healthySinceRef.current === null)
+          healthySinceRef.current = Date.now()
+        if (
+          currentIdx > 0 &&
+          Date.now() - healthySinceRef.current > 20_000 &&
+          netTier() !== "low" &&
+          Date.now() - lastSwitchRef.current > 15_000
+        ) {
+          trySwitch(currentIdx - 1)
+        }
+        stallRef.current.count = Math.max(0, stallRef.current.count - 1)
       }
-    }
-    const onPlaying = () => {
-      if (healthySinceRef.current === null) healthySinceRef.current = Date.now()
-      if (
-        currentIdx > 0 &&
-        Date.now() - healthySinceRef.current > 20_000 &&
-        netTier() !== "low" &&
-        Date.now() - lastSwitchRef.current > 15_000
-      ) {
-        trySwitch(currentIdx - 1)
-      }
-      stallRef.current.count = Math.max(0, stallRef.current.count - 1)
-    }
 
-    detach = () => {
-      v.removeEventListener("waiting", onWaiting)
-      v.removeEventListener("playing", onPlaying)
-      healthySinceRef.current = null
-    }
+      detach = () => {
+        v.removeEventListener("waiting", onWaiting)
+        v.removeEventListener("playing", onPlaying)
+        healthySinceRef.current = null
+      }
     })
     return () => {
       cancelled = true
@@ -504,53 +515,53 @@ export function VideoPlayer({
     void waitForVideo().then((v) => {
       if (cancelled || !v) return
 
-    const fail = () => {
-      if (!cancelled && !gotFrame) {
-        cancelled = true
-        handlerRef.current()
-      }
-    }
-    const arm = () => {
-      if (armed || cancelled) return
-      armed = true
-      if (v.videoWidth === 0) {
-        // No decodable video track at all.
-        setTimeout(fail, 400)
-        return
-      }
-      const rvfc = (
-        v as HTMLVideoElement & {
-          requestVideoFrameCallback?: (cb: () => void) => number
+      const fail = () => {
+        if (!cancelled && !gotFrame) {
+          cancelled = true
+          handlerRef.current()
         }
-      ).requestVideoFrameCallback
-      if (rvfc) {
-        rvfc.call(v, () => {
-          gotFrame = true
-        })
-        setTimeout(fail, 5000)
       }
-      // Without requestVideoFrameCallback (Firefox) we rely on the
-      // zero-dimension check and native error events.
-    }
+      const arm = () => {
+        if (armed || cancelled) return
+        armed = true
+        if (v.videoWidth === 0) {
+          // No decodable video track at all.
+          setTimeout(fail, 400)
+          return
+        }
+        const rvfc = (
+          v as HTMLVideoElement & {
+            requestVideoFrameCallback?: (cb: () => void) => number
+          }
+        ).requestVideoFrameCallback
+        if (rvfc) {
+          rvfc.call(v, () => {
+            gotFrame = true
+          })
+          setTimeout(fail, 5000)
+        }
+        // Without requestVideoFrameCallback (Firefox) we rely on the
+        // zero-dimension check and native error events.
+      }
 
-    // Source-level failures that never reach onError (manifest fetches
-    // failing repeatedly, hung loads): if playback never reaches data,
-    // terminate the chain.
-    stuckTimer = setTimeout(
-      () => {
-        if (!cancelled && !gotFrame && v.readyState < 2) fail()
-      },
-      playSrc.includes("/api/stream/") ? 20_000 : 10_000
-    )
+      // Source-level failures that never reach onError (manifest fetches
+      // failing repeatedly, hung loads): if playback never reaches data,
+      // terminate the chain.
+      stuckTimer = setTimeout(
+        () => {
+          if (!cancelled && !gotFrame && v.readyState < 2) fail()
+        },
+        playSrc.includes("/api/stream/") ? 20_000 : 10_000
+      )
 
-    v.addEventListener("loadedmetadata", arm)
-    v.addEventListener("playing", arm)
-    v.addEventListener("error", fail)
-    detach = () => {
-      v.removeEventListener("loadedmetadata", arm)
-      v.removeEventListener("playing", arm)
-      v.removeEventListener("error", fail)
-    }
+      v.addEventListener("loadedmetadata", arm)
+      v.addEventListener("playing", arm)
+      v.addEventListener("error", fail)
+      detach = () => {
+        v.removeEventListener("loadedmetadata", arm)
+        v.removeEventListener("playing", arm)
+        v.removeEventListener("error", fail)
+      }
     })
     return () => {
       cancelled = true
@@ -649,39 +660,78 @@ export function VideoPlayer({
     ])
   }
 
-  // Extract an embedded track's cues through the sidecar on first use.
-  async function ensureExtracted(
-    trackId: string
-  ): Promise<SubtitleTrack | null> {
-    const track = subs.find((t) => t.id === trackId)
-    if (!track?.embedded || track.src) return track ?? null
-    setPendingSub(trackId)
+  // Embedded tracks stream cues live from the sidecar (extraction reads
+  // the whole media file, so we ingest progressively instead of waiting).
+  async function showEmbeddedLive(track: SubtitleTrack) {
+    if (!videoUrl || liveStreamsRef.current.has(track.id)) return
+    const v = document.querySelector<HTMLVideoElement>(
+      ".media-default-skin video"
+    )
+    if (!v) return
+
+    const existing = Array.from(v.textTracks).find(
+      (t) => t.label === track.label
+    )
+    if (existing) {
+      existing.mode = "showing"
+      return
+    }
+
+    const ac = new AbortController()
+    liveStreamsRef.current.set(track.id, ac)
+    setPendingSub(track.id)
+
+    const textTrack = v.addTextTrack("subtitles", track.label, track.lang)
+    textTrack.mode = "showing"
+
+    const parser = createCueStreamParser((cue) => {
+      try {
+        textTrack.addCue(new VTTCue(cue.start, cue.end, cue.text))
+        if (pendingSubRef.current === track.id) setPendingSub(null)
+      } catch {}
+    })
+
     try {
       const r = await fetch(
-        `/api/subs?mode=extract&url=${encodeURIComponent(videoUrl!)}&index=${track.index}&key=${encodeURIComponent(stableKeyRef.current ?? "")}`
+        `/api/subs?mode=extract&stream=1&url=${encodeURIComponent(videoUrl)}&index=${track.index}&key=${encodeURIComponent(stableKeyRef.current ?? "")}`,
+        { signal: ac.signal }
       )
-      if (!r.ok) throw new Error(String(r.status))
-      const vtt = await r.text()
-      const src = URL.createObjectURL(new Blob([vtt], { type: "text/vtt" }))
-      let updated: SubtitleTrack | null = null
-      setSubs((prev) =>
-        prev.map((t) => {
-          if (t.id !== trackId) return t
-          updated = { ...t, src }
-          return updated
-        })
-      )
-      return updated
+      if (!r.ok || !r.body) throw new Error(String(r.status))
+      const reader = r.body.getReader()
+      const decoder = new TextDecoder()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        parser.push(decoder.decode(value, { stream: true }))
+      }
     } catch {
-      return null
+      if (countCues(textTrack) === 0) {
+        try {
+          ;(
+            v as HTMLVideoElement & { removeTextTrack(t: TextTrack): void }
+          ).removeTextTrack(textTrack)
+        } catch {}
+        try {
+          textTrack.mode = "disabled"
+        } catch {}
+      }
     } finally {
-      setPendingSub(null)
+      liveStreamsRef.current.delete(track.id)
+      if (pendingSubRef.current === track.id) setPendingSub(null)
     }
   }
 
-  // The player's own captions radio group manages <track> modes; we watch
-  // for selection changes so embedded streams can be extracted just in time
-  // (their <track> element starts without a src).
+  function countCues(t: TextTrack): number {
+    try {
+      return t.cues?.length ?? 0
+    } catch {
+      return 0
+    }
+  }
+
+  // Route caption selections: uploaded/cached tracks render as <track>
+  // elements the player manages natively; embedded ones stream cues live
+  // from the sidecar the first time they're selected.
   useEffect(() => {
     const v = document.querySelector<HTMLVideoElement>(
       ".media-default-skin video"
@@ -693,22 +743,10 @@ export function VideoPlayer({
         const textTrack = tt[i]
         if (textTrack.mode !== "showing") continue
         const match = subs.find(
-          (t) => t.embedded && !t.src && t.label === textTrack.label
+          (t) => t.embedded && t.label === textTrack.label
         )
-        if (match && !pendingSub) {
-          void ensureExtracted(match.id).then((updated) => {
-            if (updated?.src && v.isConnected) {
-              // Re-show after React re-renders the track with its new src.
-              setTimeout(() => {
-                for (let j = 0; j < tt.length; j++) {
-                  tt[j].mode =
-                    tt[j].label === updated.label ? "showing" : "disabled"
-                }
-              }, 50)
-            } else if (!updated) {
-              textTrack.mode = "disabled"
-            }
-          })
+        if (match && !liveStreamsRef.current.has(match.id)) {
+          void showEmbeddedLive(match)
         }
       }
     }
