@@ -700,7 +700,11 @@ export function VideoPlayer({
       const decoder = new TextDecoder()
       for (;;) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) {
+          parser.push(decoder.decode())
+          parser.end()
+          break
+        }
         parser.push(decoder.decode(value, { stream: true }))
       }
     } catch {

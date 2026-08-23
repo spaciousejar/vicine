@@ -78,7 +78,7 @@ export async function filesToSubtitleTracks(
  */
 export function createCueStreamParser(
   onCue: (cue: { start: number; end: number; text: string }) => void
-): { push: (chunk: string) => void } {
+): { push: (chunk: string) => void; end: () => void } {
   let buf = ""
   const toSeconds = (s: string): number | null => {
     const m = s.trim().match(/(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})/)
@@ -90,27 +90,38 @@ export function createCueStreamParser(
       Number(m[4]) / 1000
     )
   }
+  // Parse one already-delimited block; ignore the header, NOTE blocks, and
+  // anything without a valid cue-timing line or with empty text.
+  const processBlock = (block: string) => {
+    const lines = block.split(/\r?\n/)
+    const ti = lines.findIndex((l) => l.includes("-->"))
+    if (ti === -1) return
+    const [a, b] = lines[ti].split("-->")
+    const start = toSeconds(a)
+    const end = toSeconds(b)
+    if (start === null || end === null) return
+    const text = lines
+      .slice(ti + 1)
+      .join("\n")
+      .replace(/<[^>]+>/g, "")
+      .trim()
+    if (text) onCue({ start, end, text })
+  }
   return {
     push(chunk: string) {
       buf += chunk
       let idx: number
       while ((idx = buf.search(/\r?\n\r?\n/)) !== -1) {
-        const block = buf.slice(0, idx)
+        processBlock(buf.slice(0, idx))
         buf = buf.slice(idx).replace(/^\r?\n\r?\n/, "")
-        const lines = block.split(/\r?\n/)
-        const ti = lines.findIndex((l) => l.includes("-->"))
-        if (ti === -1) continue
-        const [a, b] = lines[ti].split("-->")
-        const start = toSeconds(a)
-        const end = toSeconds(b)
-        if (start === null || end === null) continue
-        const text = lines
-          .slice(ti + 1)
-          .join("\n")
-          .replace(/<[^>]+>/g, "")
-          .trim()
-        if (text) onCue({ start, end, text })
       }
+    },
+    // Flush the trailing block at end-of-stream. Interior cues are delimited
+    // by a blank line, but the final cue ends in a single newline (or none),
+    // so without this call the last cue of every stream would be lost.
+    end() {
+      if (buf.trim()) processBlock(buf)
+      buf = ""
     },
   }
 }
