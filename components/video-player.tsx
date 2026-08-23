@@ -459,6 +459,8 @@ export function VideoPlayer({
         stallRef.current.count = Math.max(0, stallRef.current.count - 1)
       }
 
+      v.addEventListener("waiting", onWaiting)
+      v.addEventListener("playing", onPlaying)
       detach = () => {
         v.removeEventListener("waiting", onWaiting)
         v.removeEventListener("playing", onPlaying)
@@ -610,10 +612,18 @@ export function VideoPlayer({
         if (cancelled) return
 
         if (data?.tracks?.length) {
-          setSubs((prev) => [
-            ...prev,
-            ...data.tracks
-              .filter((t: { index: number }) => typeof t.index === "number")
+          setSubs((prev) => {
+            // A transient re-resolve re-runs this effect against the same
+            // file; skip embedded indices already present so the caption
+            // menu doesn't accumulate duplicate entries.
+            const seen = new Set(
+              prev.filter((p) => p.embedded).map((p) => p.index)
+            )
+            const fresh = data.tracks
+              .filter(
+                (t: { index: number }) =>
+                  typeof t.index === "number" && !seen.has(t.index)
+              )
               .map(
                 (t: { index: number; lang?: string; title?: string }) =>
                   ({
@@ -624,8 +634,9 @@ export function VideoPlayer({
                     embedded: true,
                     index: t.index,
                   }) satisfies SubtitleTrack
-              ),
-          ])
+              )
+            return fresh.length ? [...prev, ...fresh] : prev
+          })
         }
 
         if (data?.audioTracks?.length > 1) {
