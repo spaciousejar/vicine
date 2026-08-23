@@ -1,0 +1,12 @@
+[Unit]
+Description=Self-healing quick tunnel -> VICINE sidecar (:7777)
+After=vicine-subs.service network-online.target
+Requires=vicine-subs.service
+
+[Service]
+ExecStart=%h/.local/bin/vicine-tunnel-wrap.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
