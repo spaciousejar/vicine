@@ -3,11 +3,11 @@ import { createCueStreamParser } from "../lib/subtitles"
 
 function collect() {
   const cues: { start: number; end: number; text: string }[] = []
-  const parser = createCueStreamParser((c) => cues.push(c))
+  const { push, end } = createCueStreamParser((c) => cues.push(c))
   return {
     cues,
-    push: (s: string) => parser.push(s),
-    end: () => parser.end(),
+    push,
+    end,
   }
 }
 
@@ -36,12 +36,14 @@ describe("createCueStreamParser", () => {
       "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nOne\n\n00:00:03.000 --> 00:00:04.000\nTwo\n"
     )
     end()
+    end()
     expect(cues.map((c) => c.text)).toEqual(["One", "Two"])
   })
 
   it("handles CRLF line endings", () => {
     const { cues, push, end } = collect()
     push("WEBVTT\r\n\r\n00:00:05.000 --> 00:00:06.000\r\nCRLF cue\r\n")
+    end()
     end()
     expect(cues).toHaveLength(1)
     expect(cues[0].text).toBe("CRLF cue")
@@ -50,6 +52,7 @@ describe("createCueStreamParser", () => {
   it("parses hour-formatted timestamps", () => {
     const { cues, push, end } = collect()
     push("WEBVTT\n\n01:02:03.500 --> 01:02:04.500\nHours\n")
+    end()
     end()
     expect(cues[0].start).toBeCloseTo(3723.5)
     expect(cues[0].end).toBeCloseTo(3724.5)
@@ -61,6 +64,7 @@ describe("createCueStreamParser", () => {
       "WEBVTT\n\nNOTE this is a comment\n\n00:00:01.000 --> 00:00:02.000\nReal\n"
     )
     end()
+    end()
     expect(cues).toHaveLength(1)
     expect(cues[0].text).toBe("Real")
   })
@@ -68,6 +72,7 @@ describe("createCueStreamParser", () => {
   it("strips HTML-ish tags from cue text", () => {
     const { cues, push, end } = collect()
     push("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<c.Bold>Styled</c>\n")
+    end()
     end()
     expect(cues[0].text).toBe("Styled")
   })

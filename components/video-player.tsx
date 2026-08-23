@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ExternalLink, Play, Copy, Check, Loader2 } from "lucide-react"
 import { VideoPlayer as VideoSkin } from "@/components/player/video-skin"
@@ -885,7 +885,7 @@ export function VideoPlayer({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {label && (
-          <Badge variant="secondary" className="gap-1">
+          <Badge variant="secondary" className="max-w-full gap-1">
             <Play className="size-3" aria-hidden="true" />
             {label}
           </Badge>
@@ -916,7 +916,8 @@ export function VideoPlayer({
           href={url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex h-7 items-center gap-1 rounded-2xl border bg-background px-3 text-sm font-medium hover:bg-muted"
+          data-slot="button"
+          className={buttonVariants({ variant: "outline", size: "sm" })}
         >
           <ExternalLink className="size-3.5" aria-hidden="true" /> Open
           externally
