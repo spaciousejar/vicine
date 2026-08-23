@@ -98,6 +98,12 @@ export function VideoPlayer({
   const [copied, setCopied] = useState(false)
   // Preserve playback position across in-player quality switches.
   const resumeAtRef = useRef<number | null>(null)
+  // Stable per-source identity for sidecar caches (survives signed-url
+  // rotation between sessions). Declared early: playSrc memo reads it.
+  const stableKeyRef = useRef(url)
+  useEffect(() => {
+    if (url) stableKeyRef.current = url
+  }, [url])
   // Sources already attempted during auto-descend, so failures cascade
   // downward without looping.
   const triedUrlsRef = useRef<Set<string>>(new Set())
@@ -590,13 +596,6 @@ export function VideoPlayer({
       setTimeout(() => clearInterval(t), 20_000)
     }
   }, [playSrc])
-
-  // Stable per-source identity for sidecar caches (survives signed-url
-  // rotation between sessions).
-  const stableKeyRef = useRef(url)
-  useEffect(() => {
-    if (url) stableKeyRef.current = url
-  }, [url])
 
   // Ask the sidecar (via /api/subs) what subtitle and audio streams the
   // file carries. Dual-audio sources expose a switchable audio menu.
