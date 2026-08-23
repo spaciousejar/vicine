@@ -80,7 +80,17 @@ function safeUrl(u) {
 // resolved media urls carry rotating signed params that would otherwise
 // bust the cache every session.
 function cachePath(key, url, index) {
-  const id = key && key.length <= 300 ? key : url
+  // Stable identity: explicit key wins; otherwise strip the rotating
+  // signed-query so the same media file always maps to the same cache.
+  let id = url
+  if (key && key.length <= 300) {
+    id = key
+  } else {
+    try {
+      const u = new URL(url)
+      id = u.origin + u.pathname
+    } catch {}
+  }
   const hash = crypto.createHash("sha1").update(`${id}|${index}`).digest("hex")
   return path.join(CACHE_DIR, `${hash}.vtt`)
 }
