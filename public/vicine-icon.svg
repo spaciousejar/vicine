@@ -1,16 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <title>VICINE app icon</title>
-  <defs>
-    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#17171B"/>
-      <stop offset="1" stop-color="#0A0A0C"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="116" fill="url(#sheen)"/>
-  <rect x="1.5" y="1.5" width="509" height="509" rx="114.5" fill="none"
-        stroke="#FFFFFF" stroke-opacity="0.09" stroke-width="3"/>
-  <g transform="translate(76,76) scale(5.625)">
-    <path fill="#FFB43A" fill-rule="evenodd" clip-rule="evenodd"
-      d="M8 10 L22 10 L32 28 L42 10 L56 10 L32 54 Z M27.5 33.5 L38.5 40.25 L27.5 47 Z"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><title>VICINE app icon</title><defs><linearGradient id="sheen" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#17171B"/><stop offset="1" stop-color="#0A0A0C"/></linearGradient></defs><rect width="512" height="512" fill="url(#sheen)" rx="116"/><rect width="509" height="509" x="1.5" y="1.5" fill="none" stroke="#FFF" stroke-opacity=".09" stroke-width="3" rx="114.5"/><g><path fill="#FFB43A" fill-rule="evenodd" d="M8 10 L22 10 L32 28 L42 10 L56 10 L32 54 Z M27.5 33.5 L38.5 40.25 L27.5 47 Z" clip-rule="evenodd" transform="translate(76,76) scale(5.625)"/></g></svg>
