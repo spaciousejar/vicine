@@ -44,3 +44,7 @@ public/_next-video
 
 # playwright artifacts
 .playwright-mcp/
+.vercel
+
+# local test directory
+/vicine-test

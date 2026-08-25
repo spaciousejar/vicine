@@ -3,7 +3,7 @@ import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import type { ContentType, MediaItem } from "@/lib/api"
-import { getCategories, getImage, getYear } from "@/lib/api"
+import { getDisplayCategories, getImage, getYear } from "@/lib/api"
 
 export function MediaCard({
   item,
@@ -13,13 +13,13 @@ export function MediaCard({
   type: ContentType
 }) {
   const img = getImage(item)
-  const cats = getCategories(item)
+  const cats = getDisplayCategories(item)
   const year = getYear(item)
   const topCats = cats.slice(0, 2)
 
   return (
     <Link href={`/watch/${type}/${item.url_slug}`} className="group block">
-      <Card className="overflow-hidden border-0 bg-card py-0 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+      <Card className="overflow-hidden border-0 bg-card py-0 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
         <div className="relative aspect-[2/3] overflow-hidden bg-muted">
           {img ? (
             <Image
@@ -57,7 +57,7 @@ export function MediaCard({
           </div>
         </div>
         <CardContent className="p-2.5">
-          <h3 className="line-clamp-2 text-sm leading-tight font-medium group-hover:text-primary">
+          <h3 className="line-clamp-2 text-sm leading-tight font-medium group-hover:text-primary transition-colors">
             {item.title}
           </h3>
           <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">

@@ -9,25 +9,29 @@ import { SeasonEpisodes } from "@/components/season-episodes"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
-  getCategories,
+  getDisplayCategories,
   getImage,
   getSeasons,
   getYear,
   parseMovieLinks,
 } from "@/lib/api"
 import type { ContentType, MediaItem } from "@/lib/api"
+import { MediaGrid } from "@/components/media-grid"
+import { RevealSection } from "@/components/reveal-section"
 
 export function WatchInnerClient({
   item,
   type,
+  related = [],
 }: {
   item: MediaItem
   type: ContentType
+  related?: MediaItem[]
 }) {
   const img = getImage(item)
-  const cats = getCategories(item)
+  const cats = getDisplayCategories(item)
   const year = getYear(item)
   const seasons = getSeasons(item)
   const movieLinks = type === "movies" ? parseMovieLinks(item.links) : []
@@ -118,20 +122,23 @@ export function WatchInnerClient({
   return (
     <div className="min-h-svh bg-background">
       <SiteHeader />
-      <main className="mx-auto max-w-7xl px-4 py-6">
-        <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
+      <main className="mx-auto max-w-7xl px-safe py-6 pb-safe">
+        <div className="mb-4 flex flex-wrap items-center gap-x-2 text-xs">
           <Link
             href={`/${type}`}
-            className="text-muted-foreground hover:text-foreground"
+            className="-ml-1 inline-flex min-h-9 items-center rounded-md px-1 text-muted-foreground hover:text-foreground transition-colors"
           >
             ← Back to {type}
           </Link>
-          <span className="text-muted-foreground">/</span>
-          <span className="font-medium">{item.title}</span>
+          <span className="min-w-0 font-medium">{item.title}</span>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1.6fr_0.9fr]">
-          <div className="space-y-4">
+        {/* Three placed blocks rather than two columns: on mobile the flow is
+            player → title/meta → episodes, so you can see what you're watching
+            without scrolling past the whole episode list. On lg the info card
+            moves into the right column and spans both rows. */}
+        <div className="grid gap-6 lg:grid-cols-[1.6fr_0.9fr] lg:items-start">
+          <div className="space-y-4 lg:col-start-1 lg:row-start-1">
             <VideoPlayer
               url={url}
               label={label}
@@ -154,89 +161,13 @@ export function WatchInnerClient({
                 </Badge>
               ))}
             </div>
-
-            {type === "movies" ? (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">
-                    Available qualities
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {movieLinks.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No links available.
-                    </p>
-                  ) : (
-                    movieLinks.map((l, i) => {
-                      const failed = failedUrls.includes(l.url)
-                      return (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between gap-3 rounded-lg border p-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
-                              {l.label}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {failed ? (
-                                <span className="text-destructive">
-                                  Unavailable
-                                </span>
-                              ) : (
-                                l.size
-                              )}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant={failed ? "secondary" : "default"}
-                              disabled={failed}
-                              onClick={() =>
-                                play(
-                                  l.url,
-                                  `${l.label}${l.size ? ` • ${l.size}` : ""}`
-                                )
-                              }
-                            >
-                              {failed ? "Dead" : "Play"}
-                            </Button>
-                            <a
-                              href={l.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex h-8 items-center rounded-2xl border bg-background px-3 text-sm hover:bg-muted"
-                            >
-                              Open
-                            </a>
-                          </div>
-                        </div>
-                      )
-                    })
-                  )}
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Episodes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <SeasonEpisodes
-                    seasons={seasons}
-                    onPlay={play}
-                    failedUrls={failedUrls}
-                  />
-                </CardContent>
-              </Card>
-            )}
           </div>
 
-          <div className="space-y-4">
+          <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
             <Card className="overflow-hidden py-0">
-              <div className="relative aspect-[2/3] overflow-hidden bg-muted">
+              {/* A 2:3 poster at full width is a ~500px-tall wall on a phone,
+                  so crop to a banner until the card is in its own column. */}
+              <div className="relative aspect-[16/10] overflow-hidden bg-muted lg:aspect-[2/3]">
                 {img ? (
                   <Image
                     src={img}
@@ -263,10 +194,6 @@ export function WatchInnerClient({
                 <Separator />
                 <div className="space-y-1 text-xs text-muted-foreground">
                   <p>
-                    <span className="font-medium text-foreground">Slug:</span>{" "}
-                    {item.url_slug}
-                  </p>
-                  <p>
                     <span className="font-medium text-foreground">
                       Updated:
                     </span>{" "}
@@ -280,7 +207,106 @@ export function WatchInnerClient({
               </CardContent>
             </Card>
           </div>
+
+          <div className="lg:col-start-1 lg:row-start-2">
+            {type === "movies" ? (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">
+                    Available qualities
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {movieLinks.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No links available.
+                    </p>
+                  ) : (
+                    movieLinks.map((l, i) => {
+                      const failed = failedUrls.includes(l.url)
+                      return (
+                        <div
+                          key={i}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {l.label}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {failed ? (
+                                <span className="text-destructive">
+                                  Unavailable
+                                </span>
+                              ) : (
+                                l.size
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 gap-2">
+                            <Button
+                              variant={failed ? "secondary" : "default"}
+                              disabled={failed}
+                              onClick={() =>
+                                play(
+                                  l.url,
+                                  `${l.label}${l.size ? ` • ${l.size}` : ""}`
+                                )
+                              }
+                            >
+                              {failed ? "Dead" : "Play"}
+                            </Button>
+                            <a
+                              href={l.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              data-slot="button"
+                              className={buttonVariants({ variant: "outline" })}
+                            >
+                              Open
+                            </a>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Episodes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <SeasonEpisodes
+                    seasons={seasons}
+                    onPlay={play}
+                    failedUrls={failedUrls}
+                  />
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
+
+        {/* Related content */}
+        {related.length > 0 && (
+          <RevealSection className="mt-12">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold tracking-tight">
+                You might also like
+              </h2>
+              <Link
+                href={`/${type}`}
+                data-slot="button"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                View all →
+              </Link>
+            </div>
+            <MediaGrid items={related} type={type} />
+          </RevealSection>
+        )}
       </main>
     </div>
   )

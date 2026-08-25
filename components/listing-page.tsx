@@ -2,6 +2,7 @@ import { MediaGrid } from "@/components/media-grid"
 import { AppPagination } from "@/components/pagination"
 import { CategoryFilter } from "@/components/category-filter"
 import { SiteHeader } from "@/components/site-header"
+import { RevealSection } from "@/components/reveal-section"
 import type { ContentType } from "@/lib/api"
 
 export function ListingShell({
@@ -26,10 +27,12 @@ export function ListingShell({
   return (
     <div className="min-h-svh bg-background">
       <SiteHeader />
-      <main className="mx-auto max-w-7xl px-4 py-6">
+      <main className="mx-auto max-w-7xl px-safe py-6 pb-safe">
         <div className="mb-6 space-y-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+              {title}
+            </h1>
             <p className="text-sm text-muted-foreground">{description}</p>
           </div>
           <CategoryFilter />
@@ -43,7 +46,9 @@ export function ListingShell({
             </p>
           )}
         </div>
-        <MediaGrid items={items} type={type} />
+        <RevealSection>
+          <MediaGrid items={items} type={type} />
+        </RevealSection>
         {!q && <AppPagination page={page} pages={pages} total={total} />}
       </main>
     </div>

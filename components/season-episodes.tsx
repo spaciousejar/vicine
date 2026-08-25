@@ -30,9 +30,13 @@ export function SeasonEpisodes({
 
   return (
     <Tabs value={active} onValueChange={setActive}>
-      <TabsList className="flex w-full justify-start overflow-x-auto">
+      <TabsList className="flex w-full justify-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {seasons.map((s) => (
-          <TabsTrigger key={s.season} value={String(s.season)}>
+          <TabsTrigger
+            key={s.season}
+            value={String(s.season)}
+            className="shrink-0 px-3"
+          >
             Season {s.season}
           </TabsTrigger>
         ))}
@@ -85,7 +89,7 @@ export function SeasonEpisodes({
                               }))
                           )
                         }
-                        className="h-7 gap-1 text-xs"
+                        className="gap-1 text-xs"
                       >
                         <Play className="size-3" aria-hidden="true" />
                         {l.quality}

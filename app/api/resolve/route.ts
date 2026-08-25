@@ -505,6 +505,19 @@ export async function GET(req: NextRequest) {
       }
     } catch {}
 
+    // True last resort: the upstream worker's /api/links endpoint blocked
+    // datacenter egress too, so we couldn't fetch tokens. Return the
+    // original URL directly — the browser (on a residential IP) CAN reach
+    // the worker and traverse the redirect chain itself.
+    if (isSafeHopUrl(url)) {
+      const fallbackPayload = {
+        goUrl: url,
+        goUrls: [{ type: "direct", url }],
+      }
+      if (!probing) cachePut(cacheKey, fallbackPayload, 45_000)
+      return NextResponse.json(fallbackPayload)
+    }
+
     // Negative-cache so repeat clicks on a dead link fail fast instead of
     // re-running the full chain for the next few minutes. Probe-bypassed
     // audits must not poison real-user caches.

@@ -81,6 +81,21 @@ export function getCategories(item: MediaItem): string[] {
     .filter(Boolean)
 }
 
+/**
+ * Remap category labels for display. The API sometimes tags anime as
+ * "Hollywood Series" which is factually wrong — this corrects it.
+ */
+const CATEGORY_REMAP: Record<string, string> = {
+  "Hollywood Series": "Anime Series",
+}
+
+export function getDisplayCategories(item: MediaItem): string[] {
+  const cats = getCategories(item)
+  const isAnime = /\banime\b/i.test(item.categories ?? "")
+  if (!isAnime) return cats
+  return cats.map((c) => CATEGORY_REMAP[c] ?? c)
+}
+
 export function getYear(item: MediaItem): string | null {
   const cats = getCategories(item)
   const year = cats.find((c) => /^\d{4}$/.test(c))
@@ -318,6 +333,35 @@ export async function searchContent(q: string): Promise<MediaItem[]> {
   )
 }
 
+/**
+ * Fetch items of the same type, excluding a specific slug. Used for the
+ * "Related content" section on the watch page.
+ */
+export async function fetchRelated(
+  type: ContentType,
+  excludeSlug: string,
+  limit = 6
+): Promise<MediaItem[]> {
+  try {
+    const res = await fetchApi(type, 1, limit + 5) // fetch a few extra in case exclude is in first page
+    return res.data
+      .filter((item) => item.url_slug !== excludeSlug)
+      .slice(0, limit)
+  } catch {
+    return []
+  }
+}
+
 export function getContentTypeLabel(type: ContentType): string {
   return type === "movies" ? "Movies" : type === "anime" ? "Anime" : "Series"
+}
+
+/** Infer content type from a bare MediaItem (e.g. from trending). */
+export function getContentType(item: MediaItem): ContentType {
+  const cats = (item.categories || "").toLowerCase()
+  if (/\banime\b/.test(cats)) return "anime"
+  const hasSeasons = Array.from({ length: 15 }).some((_, i) =>
+    Boolean(item[`season_${i + 1}`])
+  )
+  return hasSeasons ? "series" : "movies"
 }
