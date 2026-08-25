@@ -30,7 +30,7 @@ export function SeasonEpisodes({
 
   return (
     <Tabs value={active} onValueChange={setActive}>
-      <TabsList className="flex w-full justify-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <TabsList className="flex w-full [scrollbar-width:none] justify-start overflow-x-auto [&::-webkit-scrollbar]:hidden">
         {seasons.map((s) => (
           <TabsTrigger
             key={s.season}
@@ -54,7 +54,7 @@ export function SeasonEpisodes({
             {s.episodes.map((ep, epIdx) => (
               <div
                 key={`${ep.episode}-${epIdx}`}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3"
+                className="flex flex-col gap-2 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <span className="text-sm font-medium">
                   Episode {ep.episode}
@@ -62,14 +62,22 @@ export function SeasonEpisodes({
                 <div className="flex flex-wrap gap-1.5">
                   {ep.links.map((l, idx) => {
                     const failed = failedUrls.includes(l.url)
+                    const isBest =
+                      !failed &&
+                      l.quality ===
+                        [...ep.links]
+                          .filter((x) => !failedUrls.includes(x.url))
+                          .sort(
+                            (a, b) =>
+                              (parseInt(b.quality) || 0) -
+                              (parseInt(a.quality) || 0)
+                          )[0]?.quality
                     return (
                       <Button
                         key={idx}
                         size="sm"
                         variant={
-                          failed || l.quality !== "1080p"
-                            ? "secondary"
-                            : "default"
+                          failed ? "secondary" : isBest ? "default" : "outline"
                         }
                         disabled={failed}
                         onClick={() =>

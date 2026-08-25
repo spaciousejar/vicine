@@ -12,7 +12,7 @@ export function TrendingRow({ items }: { items: MediaItem[] }) {
 
   return (
     <div className="relative">
-      <div className="mx-bleed flex snap-x snap-mandatory [scrollbar-width:none] gap-5 overflow-x-auto px-safe pb-2 [&::-webkit-scrollbar]:hidden">
+      <div className="mx-bleed flex snap-x snap-mandatory [scrollbar-width:none] gap-4 overflow-x-auto px-safe pb-2 sm:gap-5 [&::-webkit-scrollbar]:hidden">
         {items.map((item, i) => {
           const img = item.featured_image || item.poster || null
           const year = getYear(item)
@@ -21,12 +21,12 @@ export function TrendingRow({ items }: { items: MediaItem[] }) {
               key={item._id ?? item.url_slug}
               href={`/watch/${getContentType(item)}/${item.url_slug}`}
               aria-label={`Number ${i + 1} trending: ${item.title}`}
-              className="group relative shrink-0 snap-start items-end pt-8"
+              className="group relative shrink-0 snap-start items-end pt-6 sm:pt-8"
             >
-              {/* Rank numeral */}
+              {/* Rank numeral — smaller on mobile to avoid overflow */}
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute -bottom-1 -left-3 z-10 text-[5.5rem] leading-none font-black select-none md:text-[7rem]"
+                className="pointer-events-none absolute -bottom-1 -left-1 z-10 text-[4rem] leading-none font-black select-none sm:-left-3 sm:text-[5.5rem] md:text-[7rem]"
                 style={{
                   WebkitTextStroke: "2px hsl(var(--primary))",
                   color: "transparent",
@@ -34,7 +34,7 @@ export function TrendingRow({ items }: { items: MediaItem[] }) {
               >
                 {i + 1}
               </span>
-              <div className="relative ml-10 w-36 overflow-hidden rounded-xl bg-muted shadow-md transition-transform duration-300 group-hover:-translate-y-1 md:w-44">
+              <div className="relative ml-8 w-28 overflow-hidden rounded-xl bg-muted shadow-md transition-transform duration-300 group-hover:-translate-y-1 sm:ml-10 sm:w-36 md:w-44">
                 <div className="relative aspect-[2/3]">
                   {img ? (
                     <Image
@@ -63,7 +63,7 @@ export function TrendingRow({ items }: { items: MediaItem[] }) {
                     )}
                   </div>
                 </div>
-                <p className="line-clamp-2 bg-card px-2 py-2 text-xs leading-tight font-medium group-hover:text-primary transition-colors">
+                <p className="line-clamp-2 bg-card px-2 py-2 text-xs leading-tight font-medium transition-colors group-hover:text-primary">
                   {item.title}
                 </p>
               </div>
@@ -77,10 +77,10 @@ export function TrendingRow({ items }: { items: MediaItem[] }) {
 
 export function TrendingRowSkeleton({ count = 8 }: { count?: number }) {
   return (
-    <div className="mx-bleed flex gap-5 overflow-hidden px-safe pt-8">
+    <div className="mx-bleed flex gap-4 overflow-hidden px-safe pt-6 sm:gap-5 sm:pt-8">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="shrink-0 pt-8">
-          <div className="ml-10 w-36 md:w-44">
+        <div key={i} className="shrink-0 pt-6 sm:pt-8">
+          <div className="ml-8 w-28 sm:ml-10 sm:w-36 md:w-44">
             <div className="aspect-[2/3] animate-pulse rounded-xl bg-muted" />
             <div className="mt-2 h-3 w-3/4 animate-pulse rounded bg-muted" />
           </div>

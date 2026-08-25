@@ -20,6 +20,7 @@ import {
 import type { ContentType, MediaItem } from "@/lib/api"
 import { MediaGrid } from "@/components/media-grid"
 import { RevealSection } from "@/components/reveal-section"
+import { cn } from "@/lib/utils"
 
 export function WatchInnerClient({
   item,
@@ -122,11 +123,11 @@ export function WatchInnerClient({
   return (
     <div className="min-h-svh bg-background">
       <SiteHeader />
-      <main className="mx-auto max-w-7xl px-safe py-6 pb-safe">
-        <div className="mb-4 flex flex-wrap items-center gap-x-2 text-xs">
+      <main className="mx-auto max-w-7xl px-safe py-4 pb-safe sm:py-6">
+        <div className="mb-3 flex flex-wrap items-center gap-x-2 text-xs sm:mb-4">
           <Link
             href={`/${type}`}
-            className="-ml-1 inline-flex min-h-9 items-center rounded-md px-1 text-muted-foreground hover:text-foreground transition-colors"
+            className="-ml-1 inline-flex min-h-9 items-center rounded-md px-1 text-muted-foreground transition-colors hover:text-foreground"
           >
             ← Back to {type}
           </Link>
@@ -167,7 +168,7 @@ export function WatchInnerClient({
             <Card className="overflow-hidden py-0">
               {/* A 2:3 poster at full width is a ~500px-tall wall on a phone,
                   so crop to a banner until the card is in its own column. */}
-              <div className="relative aspect-[16/10] overflow-hidden bg-muted lg:aspect-[2/3]">
+              <div className="relative aspect-[16/9] overflow-hidden bg-muted sm:aspect-[16/10] lg:aspect-[2/3]">
                 {img ? (
                   <Image
                     src={img}
@@ -224,29 +225,51 @@ export function WatchInnerClient({
                   ) : (
                     movieLinks.map((l, i) => {
                       const failed = failedUrls.includes(l.url)
+                      const qualityMatch = /(\d{3,4}p)/i.exec(l.label)
+                      const quality = qualityMatch ? qualityMatch[1] : null
                       return (
                         <div
                           key={i}
-                          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+                          className={cn(
+                            "rounded-lg border p-3 transition-colors",
+                            failed ? "opacity-50" : "bg-card hover:bg-accent/50"
+                          )}
                         >
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">
-                              {l.label}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {failed ? (
-                                <span className="text-destructive">
-                                  Unavailable
-                                </span>
-                              ) : (
-                                l.size
+                          {/* Top row: badge + info */}
+                          <div className="flex items-center gap-3">
+                            {quality ? (
+                              <span className="inline-flex h-8 shrink-0 items-center justify-center rounded-md bg-primary/10 px-2 text-xs font-bold text-primary tabular-nums sm:h-9 sm:min-w-[3.5rem] sm:text-sm">
+                                {quality}
+                              </span>
+                            ) : (
+                              <span className="inline-flex h-8 shrink-0 items-center justify-center rounded-md bg-muted px-2 text-xs font-medium text-muted-foreground sm:h-9 sm:min-w-[3.5rem] sm:text-sm">
+                                HD
+                              </span>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">
+                                {l.label}
+                              </p>
+                              {l.size && (
+                                <p className="text-xs text-muted-foreground">
+                                  {l.size}
+                                </p>
                               )}
-                            </p>
+                              {failed && (
+                                <p className="text-xs text-destructive">
+                                  Unavailable
+                                </p>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex shrink-0 gap-2">
+
+                          {/* Buttons: full-width stack on mobile, inline on sm+ */}
+                          <div className="mt-2 flex gap-2 sm:mt-0 sm:justify-end">
                             <Button
                               variant={failed ? "secondary" : "default"}
+                              size="sm"
                               disabled={failed}
+                              className="flex-1 sm:flex-none"
                               onClick={() =>
                                 play(
                                   l.url,
@@ -261,7 +284,10 @@ export function WatchInnerClient({
                               target="_blank"
                               rel="noreferrer"
                               data-slot="button"
-                              className={buttonVariants({ variant: "outline" })}
+                              className={buttonVariants({
+                                variant: "outline",
+                                size: "sm",
+                              })}
                             >
                               Open
                             </a>
@@ -299,7 +325,7 @@ export function WatchInnerClient({
               <Link
                 href={`/${type}`}
                 data-slot="button"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
                 View all →
               </Link>

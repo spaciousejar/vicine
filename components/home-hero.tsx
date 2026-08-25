@@ -12,10 +12,10 @@ export function HomeHero({ hero }: { hero: MediaItem }) {
   const heroImg = getImage(hero)
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both">
+    <div className="animate-in duration-700 fill-mode-both fade-in slide-in-from-bottom-4">
       <Card className="overflow-hidden border-0 bg-muted py-0">
         <div className="grid md:grid-cols-[1.1fr_0.9fr]">
-          <div className="relative aspect-[16/10] overflow-hidden bg-muted md:aspect-[4/3]">
+          <div className="relative aspect-[16/9] overflow-hidden bg-muted sm:aspect-[16/10] md:aspect-[4/3]">
             {heroImg ? (
               <Image
                 src={heroImg}
@@ -33,17 +33,15 @@ export function HomeHero({ hero }: { hero: MediaItem }) {
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent md:hidden" />
           </div>
-          <div className="flex flex-col justify-center gap-3 p-5 sm:gap-4 sm:p-6">
+          <div className="flex flex-col justify-center gap-3 p-4 sm:gap-4 sm:p-6">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <Badge variant="secondary" className="gap-1">
                 <Sparkles className="size-3" /> Featured
               </Badge>
               <span>•</span>
-              <span>
-                {hero.categories?.split(",").slice(0, 2).join(" • ")}
-              </span>
+              <span>{hero.categories?.split(",").slice(0, 2).join(" • ")}</span>
             </div>
-            <h1 className="text-3xl leading-tight font-bold tracking-tight md:text-4xl lg:text-5xl font-[family-name:var(--font-display)]">
+            <h1 className="font-[family-name:var(--font-display)] text-2xl leading-tight font-bold tracking-tight sm:text-3xl md:text-4xl lg:text-5xl">
               {hero.title}
             </h1>
             <p className="line-clamp-3 text-sm text-muted-foreground">

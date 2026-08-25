@@ -27,7 +27,7 @@ export function ListingShell({
   return (
     <div className="min-h-svh bg-background">
       <SiteHeader />
-      <main className="mx-auto max-w-7xl px-safe py-6 pb-safe">
+      <main className="mx-auto max-w-7xl px-safe py-4 pb-safe sm:py-6">
         <div className="mb-6 space-y-3">
           <div>
             <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">

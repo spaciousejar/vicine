@@ -6,12 +6,7 @@ import { RevealSection } from "@/components/reveal-section"
 import { HomeHero } from "@/components/home-hero"
 import { Separator } from "@/components/ui/separator"
 import { buttonVariants } from "@/components/ui/button"
-import {
-  fetchAnime,
-  fetchMovies,
-  fetchSeries,
-  fetchTrending,
-} from "@/lib/api"
+import { fetchAnime, fetchMovies, fetchSeries, fetchTrending } from "@/lib/api"
 import { Film, Tv, Sparkles, Flame } from "lucide-react"
 import { TrendingRow, TrendingRowSkeleton } from "@/components/trending-row"
 import { cn } from "@/lib/utils"
@@ -29,7 +24,7 @@ export default async function HomePage() {
   return (
     <div className="min-h-svh bg-background">
       <SiteHeader />
-      <main className="mx-auto max-w-7xl px-safe py-6 pb-safe">
+      <main className="mx-auto max-w-7xl px-safe py-4 pb-safe sm:py-6">
         {/* Hero — animated entrance */}
         {hero && <HomeHero hero={hero} />}
 
