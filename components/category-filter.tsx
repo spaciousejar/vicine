@@ -35,15 +35,21 @@ function CategoryFilterInner() {
       {QUICK_FILTERS.map((f) => {
         const isActive = active.toLowerCase() === f.toLowerCase();
         return (
-          <button key={f} onClick={() => toggle(f)} className="focus:outline-none">
-            <Badge variant={isActive ? "default" : "secondary"} className={cn("cursor-pointer hover:opacity-80", isActive && "shadow-sm")}>
+          <button
+            key={f}
+            onClick={() => toggle(f)}
+            data-slot="button"
+            aria-pressed={isActive}
+            className="inline-flex items-center justify-center focus:outline-none active:scale-95 transition-transform"
+          >
+            <Badge variant={isActive ? "default" : "secondary"} className={cn("h-7 cursor-pointer px-3 hover:opacity-80 transition-all", isActive && "shadow-sm ring-1 ring-primary/30")}>
               {f}
             </Badge>
           </button>
         );
       })}
       {active && (
-        <Button variant="ghost" size="sm" onClick={clear} className="h-6 px-2 text-xs">
+        <Button variant="ghost" size="sm" onClick={clear} className="px-2 text-xs">
           Clear
         </Button>
       )}
@@ -53,7 +59,7 @@ function CategoryFilterInner() {
 
 export function CategoryFilter() {
   return (
-    <Suspense fallback={<div className="h-6" />}>
+    <Suspense fallback={<div className="h-11" />}>
       <CategoryFilterInner />
     </Suspense>
   );

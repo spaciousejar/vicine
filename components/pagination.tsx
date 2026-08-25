@@ -29,10 +29,13 @@ function PaginationInner({
 
   return (
     <div className="flex flex-col items-center gap-3 py-6">
-      <div className="flex items-center gap-1">
+      {/* data-slot="button" opts these anchors into the coarse-pointer tap
+          target floor in globals.css, same as a real <Button>. */}
+      <div className="flex flex-wrap items-center justify-center gap-1.5">
         {page > 1 ? (
           <Link
             href={href(page - 1)}
+            data-slot="button"
             className={buttonVariants({ variant: "outline", size: "icon" })}
             aria-label="Previous page"
           >
@@ -41,6 +44,7 @@ function PaginationInner({
         ) : (
           <span
             aria-disabled
+            data-slot="button"
             className={cn(
               buttonVariants({ variant: "outline", size: "icon" }),
               "pointer-events-none opacity-50"
@@ -58,6 +62,8 @@ function PaginationInner({
             <Link
               key={p}
               href={href(p as number)}
+              data-slot="button"
+              aria-current={p === page ? "page" : undefined}
               className={cn(
                 buttonVariants({
                   variant: p === page ? "default" : "outline",
@@ -73,6 +79,7 @@ function PaginationInner({
         {page < pages ? (
           <Link
             href={href(page + 1)}
+            data-slot="button"
             className={buttonVariants({ variant: "outline", size: "icon" })}
             aria-label="Next page"
           >
@@ -81,6 +88,7 @@ function PaginationInner({
         ) : (
           <span
             aria-disabled
+            data-slot="button"
             className={cn(
               buttonVariants({ variant: "outline", size: "icon" }),
               "pointer-events-none opacity-50"
@@ -90,7 +98,7 @@ function PaginationInner({
           </span>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-center text-xs text-muted-foreground">
         Page {page} of {pages} — {total.toLocaleString()} titles
       </p>
     </div>

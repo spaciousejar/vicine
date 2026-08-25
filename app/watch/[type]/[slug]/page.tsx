@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { fetchBySlug } from "@/lib/api"
+import { fetchBySlug, fetchRelated } from "@/lib/api"
 import type { ContentType } from "@/lib/api"
 import { WatchInnerClient } from "./watch-inner"
 
@@ -16,11 +16,14 @@ export default async function WatchPage({
   if (!result) notFound()
 
   const activeType = (result.type as ContentType) ?? type
+  const related = await fetchRelated(activeType, slug, 6)
+
   return (
     <WatchInnerClient
       key={`${activeType}:${slug}`}
       item={result.item}
       type={activeType}
+      related={related}
     />
   )
 }

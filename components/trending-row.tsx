@@ -2,7 +2,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import type { MediaItem } from "@/lib/api"
-import { getYear } from "@/lib/api"
+import { getContentType, getDisplayCategories, getYear } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 // Ranked horizontal scroller — oversized stroked rank numerals overlapping
@@ -12,16 +12,16 @@ export function TrendingRow({ items }: { items: MediaItem[] }) {
 
   return (
     <div className="relative">
-      <div className="-mx-4 flex snap-x snap-mandatory [scrollbar-width:none] gap-5 overflow-x-auto px-4 pb-2 [&::-webkit-scrollbar]:hidden">
+      <div className="mx-bleed flex snap-x snap-mandatory [scrollbar-width:none] gap-5 overflow-x-auto px-safe pb-2 [&::-webkit-scrollbar]:hidden">
         {items.map((item, i) => {
           const img = item.featured_image || item.poster || null
           const year = getYear(item)
           return (
             <Link
               key={item._id ?? item.url_slug}
-              href={`/watch/movies/${item.url_slug}`}
+              href={`/watch/${getContentType(item)}/${item.url_slug}`}
               aria-label={`Number ${i + 1} trending: ${item.title}`}
-              className="group relative flex shrink-0 snap-start items-end pt-8"
+              className="group relative shrink-0 snap-start items-end pt-8"
             >
               {/* Rank numeral */}
               <span
@@ -63,7 +63,7 @@ export function TrendingRow({ items }: { items: MediaItem[] }) {
                     )}
                   </div>
                 </div>
-                <p className="line-clamp-2 bg-card px-2 py-2 text-xs leading-tight font-medium group-hover:text-primary">
+                <p className="line-clamp-2 bg-card px-2 py-2 text-xs leading-tight font-medium group-hover:text-primary transition-colors">
                   {item.title}
                 </p>
               </div>
@@ -77,7 +77,7 @@ export function TrendingRow({ items }: { items: MediaItem[] }) {
 
 export function TrendingRowSkeleton({ count = 8 }: { count?: number }) {
   return (
-    <div className="-mx-4 flex gap-5 overflow-hidden px-4 pt-8">
+    <div className="mx-bleed flex gap-5 overflow-hidden px-safe pt-8">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="shrink-0 pt-8">
           <div className="ml-10 w-36 md:w-44">

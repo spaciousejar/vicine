@@ -1,20 +1,18 @@
 import Link from "next/link"
-import Image from "next/image"
 import { Suspense } from "react"
 import { SiteHeader } from "@/components/site-header"
 import { MediaGrid, MediaGridSkeleton } from "@/components/media-grid"
-import { Badge } from "@/components/ui/badge"
-import { buttonVariants } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { RevealSection } from "@/components/reveal-section"
+import { HomeHero } from "@/components/home-hero"
 import { Separator } from "@/components/ui/separator"
+import { buttonVariants } from "@/components/ui/button"
 import {
   fetchAnime,
   fetchMovies,
   fetchSeries,
   fetchTrending,
-  getImage,
 } from "@/lib/api"
-import { Clapperboard, Film, Tv, Sparkles, Flame } from "lucide-react"
+import { Film, Tv, Sparkles, Flame } from "lucide-react"
 import { TrendingRow, TrendingRowSkeleton } from "@/components/trending-row"
 import { cn } from "@/lib/utils"
 
@@ -27,74 +25,18 @@ export default async function HomePage() {
   ])
 
   const hero = moviesRes.data[0] ?? animeRes.data[0] ?? seriesRes.data[0]
-  const heroImg = hero ? getImage(hero) : null
 
   return (
     <div className="min-h-svh bg-background">
       <SiteHeader />
-      <main className="mx-auto max-w-7xl px-4 py-6">
-        {/* Hero */}
-        {hero && (
-          <Card className="overflow-hidden border-0 bg-muted py-0">
-            <div className="grid md:grid-cols-[1.1fr_0.9fr]">
-              <div className="relative aspect-[16/10] overflow-hidden bg-muted md:aspect-[4/3]">
-                {heroImg ? (
-                  // LCP element: load eagerly with high fetch priority.
-                  <Image
-                    src={heroImg}
-                    alt={hero.title}
-                    fill
-                    priority
-                    sizes="(max-width: 768px) 100vw, (max-width: 1280px) 55vw, 700px"
-                    className="object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-muted-foreground">
-                    No image
-                  </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent md:hidden" />
-              </div>
-              <div className="flex flex-col justify-center gap-4 p-6">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Badge variant="secondary" className="gap-1">
-                    <Sparkles className="size-3" /> Featured
-                  </Badge>
-                  <span>•</span>
-                  <span>
-                    {hero.categories?.split(",").slice(0, 2).join(" • ")}
-                  </span>
-                </div>
-                <h1 className="text-2xl leading-tight font-semibold tracking-tight md:text-3xl">
-                  {hero.title}
-                </h1>
-                <p className="line-clamp-3 text-sm text-muted-foreground">
-                  {hero.excerpt ??
-                    "Watch in 480p, 720p, 1080p — streaming via VICINE."}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={`/watch/movies/${hero.url_slug}`}
-                    className={cn(buttonVariants({ size: "lg" }), "gap-2")}
-                  >
-                    <Clapperboard className="size-4" /> Watch now
-                  </Link>
-                  <Link
-                    href="/movies"
-                    className={cn(buttonVariants({ variant: "outline" }))}
-                  >
-                    Browse movies
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
+      <main className="mx-auto max-w-7xl px-safe py-6 pb-safe">
+        {/* Hero — animated entrance */}
+        {hero && <HomeHero hero={hero} />}
 
         <div className="mt-8 grid gap-8">
           {trending.length > 0 && (
             <>
-              <section className="min-w-0">
+              <RevealSection className="min-w-0">
                 <div className="mb-3 flex items-center gap-2">
                   <Flame className="size-4 text-primary" />
                   <h2 className="text-lg font-semibold tracking-tight">
@@ -104,33 +46,39 @@ export default async function HomePage() {
                 <Suspense fallback={<TrendingRowSkeleton />}>
                   <TrendingRow items={trending} />
                 </Suspense>
-              </section>
+              </RevealSection>
               <Separator />
             </>
           )}
-          <Section
-            title="Movies"
-            icon={<Film className="size-4" />}
-            href="/movies"
-            items={moviesRes.data.slice(0, 6)}
-            type="movies"
-          />
+          <RevealSection>
+            <Section
+              title="Movies"
+              icon={<Film className="size-4" />}
+              href="/movies"
+              items={moviesRes.data.slice(0, 6)}
+              type="movies"
+            />
+          </RevealSection>
           <Separator />
-          <Section
-            title="Anime"
-            icon={<Sparkles className="size-4" />}
-            href="/anime"
-            items={animeRes.data.slice(0, 6)}
-            type="anime"
-          />
+          <RevealSection>
+            <Section
+              title="Anime"
+              icon={<Sparkles className="size-4" />}
+              href="/anime"
+              items={animeRes.data.slice(0, 6)}
+              type="anime"
+            />
+          </RevealSection>
           <Separator />
-          <Section
-            title="Series"
-            icon={<Tv className="size-4" />}
-            href="/series"
-            items={seriesRes.data.slice(0, 6)}
-            type="series"
-          />
+          <RevealSection>
+            <Section
+              title="Series"
+              icon={<Tv className="size-4" />}
+              href="/series"
+              items={seriesRes.data.slice(0, 6)}
+              type="series"
+            />
+          </RevealSection>
         </div>
       </main>
     </div>
@@ -152,14 +100,18 @@ function Section({
 }) {
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="flex min-w-0 items-center gap-2 text-lg font-semibold tracking-tight">
           {icon}
           {title}
         </h2>
         <Link
           href={href}
-          className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+          data-slot="button"
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "sm" }),
+            "shrink-0"
+          )}
         >
           View all →
         </Link>
