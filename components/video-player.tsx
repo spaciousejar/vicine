@@ -15,7 +15,8 @@ const HLS_EXT = /\.m3u8($|\?)/i
 const MKV_EXT = /\.mkv($|\?)/i
 // Firefox/Safari/iOS cannot demux MKV natively — route through the
 // server-side transmux proxy immediately instead of waiting for an error.
-const NEEDS_HLS_PROXY = typeof navigator !== "undefined" && !/Chrome\//.test(navigator.userAgent)
+const NEEDS_HLS_PROXY =
+  typeof navigator !== "undefined" && !/Chrome\//.test(navigator.userAgent)
 
 // ---------------------------------------------------------------------------
 // Network-adaptive quality (Auto mode)
@@ -400,7 +401,8 @@ export function VideoPlayer({
     // can't demux it natively (Firefox, Safari, iOS). Chrome tolerates MKV
     // so it plays direct. `useHlsProxy` handles the error-triggered path
     // for edge cases the heuristic misses.
-    const needsProxy = useHlsProxy || (NEEDS_HLS_PROXY && MKV_EXT.test(videoUrl))
+    const needsProxy =
+      useHlsProxy || (NEEDS_HLS_PROXY && MKV_EXT.test(videoUrl))
     if (!needsProxy) return videoUrl
     return `/api/stream/direct/index.m3u8?url=${encodeURIComponent(videoUrl)}`
   }, [videoUrl, useHlsProxy, activeAudioId])
@@ -810,11 +812,11 @@ export function VideoPlayer({
       }
       // Mirrors exhausted — descend through remaining catalog qualities.
       if (descendQuality()) return
-    } else if (!useHlsProxy && videoUrl && !HLS_EXT.test(videoUrl) && !MKV_EXT.test(videoUrl)) {
-      // Keep videoUrl: playSrc recomputes to the proxy URL and the key
-      // change remounts the player in HLS mode immediately.
-      setUseHlsProxy(true)
-      return
+      // HLS proxy disabled — requires ffmpeg + filesystem (Node.js only),
+      // not available on Cloudflare Workers.
+      // } else if (!useHlsProxy && videoUrl && !HLS_EXT.test(videoUrl)) {
+      //   setUseHlsProxy(true)
+      //   return
     } else if (descendQuality()) {
       // Direct source failed even through the proxy: auto-switch to the
       // next-best catalog quality before giving up.
