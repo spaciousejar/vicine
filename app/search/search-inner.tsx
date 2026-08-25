@@ -89,10 +89,24 @@ export function SearchPageInner() {
               {results.length} result{results.length !== 1 ? "s" : ""} for
               &ldquo;{query}&rdquo;
             </p>
-            <MediaGrid
-              items={results}
-              type={results[0]?.inferredType ?? "movies"}
-            />
+            {(() => {
+              const groups = results.reduce(
+                (acc, item) => {
+                  const t = (item.inferredType ?? "movies") as ContentType
+                  acc[t].push(item)
+                  return acc
+                },
+                {
+                  movies: [] as SearchResult[],
+                  anime: [] as SearchResult[],
+                  series: [] as SearchResult[],
+                }
+              )
+
+              return (["movies", "anime", "series"] as const)
+                .filter((t) => groups[t].length > 0)
+                .map((t) => <MediaGrid key={t} items={groups[t]} type={t} />)
+            })()}
           </>
         ) : searched && query.trim() ? (
           <div className="py-20 text-center">
