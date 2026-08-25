@@ -799,11 +799,11 @@ export function VideoPlayer({
       }
       // Mirrors exhausted — descend through remaining catalog qualities.
       if (descendQuality()) return
-    } else if (!useHlsProxy && videoUrl && !HLS_EXT.test(videoUrl)) {
-      // Keep videoUrl: playSrc recomputes to the proxy URL and the key
-      // change remounts the player in HLS mode immediately.
-      setUseHlsProxy(true)
-      return
+      // HLS proxy disabled — requires ffmpeg + filesystem (Node.js only),
+      // not available on Cloudflare Workers.
+      // } else if (!useHlsProxy && videoUrl && !HLS_EXT.test(videoUrl)) {
+      //   setUseHlsProxy(true)
+      //   return
     } else if (descendQuality()) {
       // Direct source failed even through the proxy: auto-switch to the
       // next-best catalog quality before giving up.
