@@ -1,7 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "vicine-web",
-  "compatibility_date": "2025-08-25",
+  "name": "vicine",
+  "compatibility_date": "2026-08-25",
+  "compatibility_flags": ["nodejs_compat"],
   "main": ".open-next/worker.js",
   "observability": {
     "enabled": true,
@@ -13,7 +14,7 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "vicine-web",
+      "service": "vicine",
     },
   ],
 }
