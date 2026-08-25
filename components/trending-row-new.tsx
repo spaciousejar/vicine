@@ -18,7 +18,7 @@ export function TrendingRowNew({ items }: TrendingRowNewProps) {
   if (items.length === 0) return null
 
   return (
-    <div className="scrollbar-hide flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4">
+    <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {items.map((item, i) => {
         const img = getImage(item)
         const year = getYear(item)
