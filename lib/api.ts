@@ -91,7 +91,7 @@ const CATEGORY_REMAP: Record<string, string> = {
 
 export function getDisplayCategories(item: MediaItem): string[] {
   const cats = getCategories(item)
-  const isAnime = /\banime\b/.test(item.categories || "")
+  const isAnime = /\banime\b/i.test(item.categories ?? "")
   if (!isAnime) return cats
   return cats.map((c) => CATEGORY_REMAP[c] ?? c)
 }
