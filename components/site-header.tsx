@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useState } from "react"
-import { Search, Menu, X, Clapperboard } from "lucide-react"
+import { Search, Menu, X } from "lucide-react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -43,16 +44,23 @@ function SiteHeaderInner() {
 
   return (
     <>
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4">
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-safe sm:gap-4">
         <Link
           href="/"
-          className="flex items-center gap-2 font-semibold tracking-tight"
+          className="flex shrink-0 items-center gap-2 font-semibold tracking-tight"
           aria-label="VICINE home"
         >
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Clapperboard className="size-4" aria-hidden="true" />
+          <span className="flex size-8 items-center justify-center overflow-hidden rounded-lg bg-primary">
+            <Image
+              src="/icon-512.png"
+              alt=""
+              width={32}
+              height={32}
+              className="size-full object-cover"
+              priority
+            />
           </span>
-          <span className="hidden sm:inline">VICINE</span>
+          <span>VICINE</span>
         </Link>
 
         <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
@@ -82,7 +90,7 @@ function SiteHeaderInner() {
         >
           <div className="relative flex-1">
             <Search
-              className="pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground"
+              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
             />
             <Input
@@ -119,7 +127,7 @@ function SiteHeaderInner() {
         <div id="mobile-nav" className="border-t bg-background md:hidden">
           <nav
             aria-label="Mobile"
-            className="mx-auto flex max-w-7xl flex-col gap-1 p-4"
+            className="mx-auto flex max-w-7xl flex-col gap-1 px-safe py-3"
           >
             {NAV.map((item) => (
               <Link
@@ -128,7 +136,7 @@ function SiteHeaderInner() {
                 onClick={() => setOpen(false)}
                 aria-current={pathname === item.href ? "page" : undefined}
                 className={cn(
-                  "rounded-md px-3 py-2 text-sm",
+                  "flex min-h-11 items-center rounded-md px-3 text-sm",
                   pathname === item.href
                     ? "bg-secondary"
                     : "text-muted-foreground"
@@ -140,7 +148,7 @@ function SiteHeaderInner() {
             <form onSubmit={onSearch} className="mt-2 flex gap-2">
               <div className="relative flex-1">
                 <Search
-                  className="pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground"
+                  className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
                   aria-hidden="true"
                 />
                 <Input
@@ -151,7 +159,7 @@ function SiteHeaderInner() {
                   className="pl-8"
                 />
               </div>
-              <Button type="submit" size="sm">
+              <Button type="submit" size="lg">
                 Go
               </Button>
             </form>
