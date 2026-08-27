@@ -45,6 +45,7 @@
     "eslint-config-next": "16.2.6",
     "prettier": "^3.9.6",
     "prettier-plugin-tailwindcss": "^0.8.1",
+    "strix": "^0.1.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3"
   }

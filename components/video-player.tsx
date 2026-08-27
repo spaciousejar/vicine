@@ -15,7 +15,7 @@ const HLS_EXT = /\.m3u8($|\?)/i
 const MKV_EXT = /\.mkv($|\?)/i
 // Firefox/Safari/iOS cannot demux MKV natively — route through the
 // server-side transmux proxy immediately instead of waiting for an error.
-const NEEDS_HLS_PROXY =
+const SHOULD_USE_TRANSMUX_PROXY =
   typeof navigator !== "undefined" && !/Chrome\//.test(navigator.userAgent)
 
 // ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ export function VideoPlayer({
   const resumeAtRef = useRef<number | null>(null)
   // Stable per-source identity for sidecar caches (survives signed-url
   // rotation between sessions). Declared early: playSrc memo reads it.
-  const stableKeyRef = useRef(url)
+  const stableKeyRef = useRef<string | null>(null)
   useEffect(() => {
     if (url) stableKeyRef.current = url
   }, [url])
@@ -269,8 +269,8 @@ export function VideoPlayer({
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- qualityOptions/variants are derived; the tier pick runs once per title via autoAppliedKeyRef
-  }, [url, resolveAttempt, autoMode])
+    // All dependencies are now properly declared
+  }, [url, resolveAttempt, autoMode, variants])
 
   // Firefox/Safari cannot demux MKV natively while Chrome tolerates it.
   // Route non-HLS sources through the server-side transmux proxy when the
@@ -402,7 +402,7 @@ export function VideoPlayer({
     // so it plays direct. `useHlsProxy` handles the error-triggered path
     // for edge cases the heuristic misses.
     const needsProxy =
-      useHlsProxy || (NEEDS_HLS_PROXY && MKV_EXT.test(videoUrl))
+      useHlsProxy || (SHOULD_USE_TRANSMUX_PROXY && MKV_EXT.test(videoUrl))
     if (!needsProxy) return videoUrl
     return `/api/stream/direct/index.m3u8?url=${encodeURIComponent(videoUrl)}`
   }, [videoUrl, useHlsProxy, activeAudioId])
@@ -500,7 +500,12 @@ export function VideoPlayer({
 
     const start = () => {
       for (const u of siblings) {
-        fetch(`/api/resolve?url=${encodeURIComponent(u)}`).catch(() => {})
+        fetch(`/api/resolve?url=${encodeURIComponent(u)}`).catch(err => {
+          // Log prefetch errors for debugging but don't affect playback
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn(`Prefetch failed for ${u}:`, err)
+          }
+        })
       }
     }
     const v = document.querySelector<HTMLVideoElement>(
