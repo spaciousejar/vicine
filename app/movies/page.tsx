@@ -14,12 +14,11 @@ export default async function MoviesPage({
   return (
     <ListingShell
       title="Movies"
-      description="10,134 titles — 480p / 720p / 1080p • Dual audio • WEB-DL"
+      description="10,134 titles in 480p / 720p / 1080p. Dual audio, WEB-DL."
       items={items}
       type="movies"
       page={q ? 1 : res.pagination.page}
       pages={q ? 1 : res.pagination.pages}
-      total={q ? items.length : res.pagination.total}
       q={q}
     />
   )

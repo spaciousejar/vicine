@@ -14,12 +14,11 @@ export default async function SeriesPage({
   return (
     <ListingShell
       title="Series"
-      description="1,931 series — K-Drama • Hollywood • Multi-season"
+      description="1,931 series. K-Drama, Hollywood, multi-season."
       items={items}
       type="series"
       page={q ? 1 : res.pagination.page}
       pages={q ? 1 : res.pagination.pages}
-      total={q ? items.length : res.pagination.total}
       q={q}
     />
   )

@@ -83,7 +83,7 @@ export function SeasonEpisodes({
                         onClick={() =>
                           onPlay(
                             l.url,
-                            `S${s.season} E${ep.episode} — ${l.quality}`,
+                            `S${s.season} E${ep.episode}, ${l.quality}`,
                             ep.links
                               .slice()
                               .sort((a, b) => {

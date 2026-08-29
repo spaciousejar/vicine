@@ -5,6 +5,7 @@ import {
   type ComponentProps,
   forwardRef,
   type ReactNode,
+  useEffect,
   useRef,
 } from "react"
 import {
@@ -105,6 +106,8 @@ export interface VideoSkinProps {
   className?: string
   renderPoster?: Poster.Props["render"]
   onError?: () => void
+  /** Fired when playback reaches the end of the media. */
+  onEnded?: () => void
   /** Text tracks rendered into the media element (uploads + embedded). */
   tracks?: SubtitleTrack[]
   /** Label of the embedded track currently being extracted, if any. */
@@ -127,6 +130,7 @@ export function VideoPlayer({
   renderPoster,
   style,
   onError,
+  onEnded,
   tracks,
   extractingLabel,
   onAddSubtitleFiles,
@@ -139,13 +143,52 @@ export function VideoPlayer({
 }: VideoSkinProps): ReactNode {
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Auto-fit: while fullscreen, fit the video to the screen edge-to-edge in
+  // portrait (fill/crop) to avoid huge letterboxing, and contain otherwise.
+  useEffect(() => {
+    const root = document.querySelector<HTMLElement>(
+      ".media-default-skin.media-default-skin--video"
+    )
+    if (!root) return
+
+    const applyFit = () => {
+      const isFs =
+        document.fullscreenElement === root ||
+        (document as Document & { webkitFullscreenElement?: Element | null })
+          .webkitFullscreenElement === root
+      const portrait = window.innerHeight > window.innerWidth
+      root.style.setProperty(
+        "--media-object-fit",
+        isFs && portrait ? "fill" : "contain"
+      )
+    }
+
+    applyFit()
+    document.addEventListener("fullscreenchange", applyFit)
+    document.addEventListener("webkitfullscreenchange", applyFit)
+    window.addEventListener("orientationchange", applyFit)
+    window.addEventListener("resize", applyFit)
+    return () => {
+      document.removeEventListener("fullscreenchange", applyFit)
+      document.removeEventListener("webkitfullscreenchange", applyFit)
+      window.removeEventListener("orientationchange", applyFit)
+      window.removeEventListener("resize", applyFit)
+    }
+  }, [])
+
   return (
     <Player poster={poster}>
       <Container
         className={`media-default-skin media-default-skin--video ${className ?? ""}`}
         style={style}
       >
-        <Video src={src} playsInline onError={onError}>
+        <Video
+          src={src}
+          playsInline
+          autoPlay
+          onEnded={onEnded}
+          onError={onError}
+        >
           {tracks?.map((t) => (
             <track
               key={t.id}
@@ -174,7 +217,18 @@ export function VideoPlayer({
         <BufferingIndicator
           render={(props) => (
             <div {...props} className="media-buffering-indicator">
-              <SpinnerIcon className="media-icon" />
+              {poster ? (
+                <img
+                  src={poster}
+                  alt=""
+                  aria-hidden="true"
+                  className="media-buffering__backdrop"
+                />
+              ) : null}
+              <div className="media-buffering__content">
+                <SpinnerIcon className="media-icon media-buffering__spinner" />
+                <span className="media-buffering__label">Buffering</span>
+              </div>
             </div>
           )}
         />
@@ -429,12 +483,7 @@ function SettingsMenu({
     (audioOptions?.length ?? 0) > 1 ||
     Boolean(onLoadSubtitleFiles)
 
-  if (
-    !hasPlaybackRate &&
-    !hasQuality &&
-    !hasCaptions &&
-    !hasCustomGroups
-  )
+  if (!hasPlaybackRate && !hasQuality && !hasCaptions && !hasCustomGroups)
     return null
 
   return (
@@ -624,7 +673,8 @@ function SettingsMenu({
                     <span>{t(audioText)}</span>
                     <span className="media-menu__hint">
                       <bdi dir="auto" className="media-menu__hint-label">
-                        {audioOptions.find((a) => a.id === activeAudioId)?.label ?? audioOptions[0].label}
+                        {audioOptions.find((a) => a.id === activeAudioId)
+                          ?.label ?? audioOptions[0].label}
                       </bdi>
                       <MenuChevron />
                     </span>
@@ -651,7 +701,10 @@ function SettingsMenu({
                       onSelect={() => onAudioChange?.(a.id)}
                     >
                       <bdi dir="auto">{a.label}</bdi>
-                      <Menu.ItemIndicator forceMount className="media-menu__indicator">
+                      <Menu.ItemIndicator
+                        forceMount
+                        className="media-menu__indicator"
+                      >
                         <CheckIcon className="media-icon" />
                       </Menu.ItemIndicator>
                     </Menu.RadioItem>

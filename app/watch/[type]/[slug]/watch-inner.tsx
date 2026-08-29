@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { SiteHeader } from "@/components/site-header"
@@ -67,7 +67,7 @@ export function WatchInnerClient({
     bestMovie
       ? `${bestMovie.label}${bestMovie.size ? ` • ${bestMovie.size}` : ""}`
       : firstSeason && bestEpisodeLink
-        ? `S${firstSeason.season} E${firstEpisode?.episode} — ${bestEpisodeLink.quality}`
+        ? `S${firstSeason.season} E${firstEpisode?.episode}, ${bestEpisodeLink.quality}`
         : undefined
   )
   // Sources that failed to resolve — surfaced as unavailable so users stop
@@ -83,6 +83,25 @@ export function WatchInnerClient({
     .map((l) => ({ url: l.url, label: l.quality }))
   const [episodeVariants, setEpisodeVariants] = useState(initialEpisodeVariants)
 
+  // "Up next" countdown overlay shown briefly before auto-advancing to the
+  // next episode. Cancel lets the viewer stop the auto-advance.
+  const UP_NEXT_DELAY = 5
+  const [upNext, setUpNext] = useState<{
+    season: number
+    episode: number
+  } | null>(null)
+  const [countdown, setCountdown] = useState(0)
+  const countdownRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (countdownRef.current !== null) {
+        clearInterval(countdownRef.current)
+        countdownRef.current = null
+      }
+    }
+  }, [])
+
   // Every playable source for this title — used by the in-player quality
   // menu for movies, and as the lookup for labels when episodes switch.
   const allVariants = (
@@ -97,7 +116,7 @@ export function WatchInnerClient({
             ep.links.map((l) => ({
               url: l.url,
               label: `S${s.season}E${ep.episode} ${l.quality}`,
-              text: `S${s.season} E${ep.episode} — ${l.quality}`,
+              text: `S${s.season} E${ep.episode}, ${l.quality}`,
             }))
           )
         )
@@ -114,10 +133,97 @@ export function WatchInnerClient({
     l: string,
     links?: { label: string; url: string }[]
   ) {
+    cancelUpNext()
     setUrl(u)
     setLabel(l)
     if (links) setEpisodeVariants(links)
     window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  // Flat watching order across every season (series/anime only): the whole
+  // S1..Sn episode list in sequence, so "next episode" rolls into the next
+  // season automatically and stops after the final episode.
+  const episodeOrder = seasons.flatMap((s) =>
+    s.episodes.map((ep) => ({
+      season: s.season,
+      episode: ep.episode,
+      links: ep.links,
+    }))
+  )
+
+  function bestLinkFor(
+    s: number,
+    e: number
+  ): { url: string; quality: string } | null {
+    const ep = episodeOrder.find((x) => x.season === s && x.episode === e)
+    if (!ep) return null
+    const playable = [...ep.links].filter((l) => !failedUrls.includes(l.url))
+    const best = [...playable].sort(
+      (a, b) => (parseInt(b.quality) || 0) - (parseInt(a.quality) || 0)
+    )[0]
+    return best ? { url: best.url, quality: best.quality } : null
+  }
+
+  function playEpisode(s: number, e: number) {
+    const best = bestLinkFor(s, e)
+    if (!best) return
+    const ep = episodeOrder.find((x) => x.season === s && x.episode === e)
+    const variants = [
+      ...((ep?.links ?? []) as { quality: string; url: string }[]),
+    ]
+      .filter((l) => !failedUrls.includes(l.url))
+      .sort((a, b) => (parseInt(b.quality) || 0) - (parseInt(a.quality) || 0))
+      .map((x) => ({ label: x.quality, url: x.url }))
+    play(best.url, `S${s} E${e}, ${best.quality}`, variants)
+  }
+
+  // Dismiss any pending "Up next" countdown without advancing.
+  function cancelUpNext() {
+    if (countdownRef.current !== null) {
+      clearInterval(countdownRef.current)
+      countdownRef.current = null
+    }
+    setUpNext(null)
+    setCountdown(0)
+  }
+
+  // Start the "Up next" countdown and auto-advance when it hits zero.
+  function startUpNext(next: { season: number; episode: number }) {
+    cancelUpNext()
+    setUpNext(next)
+    setCountdown(UP_NEXT_DELAY)
+    countdownRef.current = window.setInterval(() => {
+      setCountdown((c) => {
+        if (c <= 1) {
+          clearInterval(countdownRef.current ?? undefined)
+          countdownRef.current = null
+          setUpNext(null)
+          setCountdown(0)
+          playEpisode(next.season, next.episode)
+          return 0
+        }
+        return c - 1
+      })
+    }, 1000)
+  }
+
+  // When the current episode ends, show "Up next" and auto-play the next one.
+  function handleEnded() {
+    if (type === "movies") return
+    const idx = episodeOrder.findIndex((x) =>
+      x.links.some((l) => l.url === url)
+    )
+    if (idx === -1) return
+    const next = episodeOrder[idx + 1]
+    if (!next) return
+    startUpNext({ season: next.season, episode: next.episode })
+  }
+
+  function playUpNext() {
+    if (!upNext) return
+    const { season, episode } = upNext
+    cancelUpNext()
+    playEpisode(season, episode)
   }
 
   return (
@@ -140,24 +246,57 @@ export function WatchInnerClient({
             moves into the right column and spans both rows. */}
         <div className="grid gap-6 lg:grid-cols-[1.6fr_0.9fr] lg:items-start">
           <div className="space-y-4 lg:col-start-1 lg:row-start-1">
-            <VideoPlayer
-              url={url}
-              label={label}
-              variants={
-                type === "movies" ? allVariants : (episodeVariants ?? [])
-              }
-              onUrlChange={(u) => {
-                setUrl(u)
-                const variant = allVariants.find((v) => v.url === u)
-                if (variant?.text) setLabel(variant.text)
-              }}
-              onUnresolved={markUnresolved}
-            />
+            <div className="relative">
+              <VideoPlayer
+                url={url}
+                label={label}
+                poster={img}
+                variants={
+                  type === "movies" ? allVariants : (episodeVariants ?? [])
+                }
+                onUrlChange={(u) => {
+                  setUrl(u)
+                  const variant = allVariants.find((v) => v.url === u)
+                  if (variant?.text) setLabel(variant.text)
+                }}
+                onUnresolved={markUnresolved}
+                onEnded={handleEnded}
+              />
+
+              {upNext && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-end bg-gradient-to-t from-black/70 to-transparent p-4 pr-4 sm:p-5">
+                  <div className="pointer-events-auto w-full max-w-xs rounded-xl border bg-card/90 p-4 shadow-xl backdrop-blur">
+                    <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                      Up next
+                    </p>
+                    <p className="mt-1 truncate text-base font-semibold">
+                      {item.title} · S{upNext.season} E{upNext.episode}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Starting in {countdown}s
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <Button size="sm" onClick={playUpNext} className="flex-1">
+                        Play now
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={cancelUpNext}
+                        className="flex-1"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="flex flex-wrap gap-1.5">
               {year && <Badge variant="secondary">{year}</Badge>}
-              {cats.slice(0, 6).map((c) => (
-                <Badge key={c} variant="outline">
+              {cats.slice(0, 6).map((c, i) => (
+                <Badge key={`${c}-${i}`} variant="outline">
                   {c}
                 </Badge>
               ))}

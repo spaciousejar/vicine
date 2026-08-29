@@ -55,7 +55,7 @@ export function TrendingRow({ items }: { items: MediaItem[] }) {
                       <Badge
                         variant="secondary"
                         className={cn(
-                          "h-5 bg-white/90 px-1.5 text-[10px] leading-none text-black"
+                          "h-5 border-white/20 bg-black/60 px-1.5 text-[10px] leading-none text-white"
                         )}
                       >
                         {year}

@@ -14,12 +14,11 @@ export default async function AnimePage({
   return (
     <ListingShell
       title="Anime"
-      description="390 series — multi-season • 480p / 720p / 1080p"
+      description="390 series, multi-season. Available in 480p / 720p / 1080p."
       items={items}
       type="anime"
       page={q ? 1 : res.pagination.page}
       pages={q ? 1 : res.pagination.pages}
-      total={q ? items.length : res.pagination.total}
       q={q}
     />
   )

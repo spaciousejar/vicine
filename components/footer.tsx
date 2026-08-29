@@ -100,7 +100,7 @@ export function Footer() {
               </li>
               <li>
                 <span className="text-sm text-muted-foreground">
-                  480p – 4K quality
+                  480p to 4K quality
                 </span>
               </li>
               <li>

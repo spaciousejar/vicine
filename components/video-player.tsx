@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
+import Image from "next/image"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ExternalLink, Play, Copy, Check, Loader2 } from "lucide-react"
@@ -75,12 +76,71 @@ function tierIndexFor(tier: NetTier, count: number): number {
   return count - 1
 }
 
+/**
+ * Cinematic loading overlay for the player — shown while the source resolves
+ * or the video buffers before first frame. Uses the title's poster as a
+ * dimmed backdrop so the wait feels on-brand rather than a bare black box.
+ * Reduced-motion is handled globally in globals.css (animations collapse).
+ */
+function PlayerLoading({
+  poster,
+  title,
+  message,
+}: {
+  poster?: string | null
+  title?: string
+  message: string
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-5 overflow-hidden bg-black text-white"
+    >
+      {poster ? (
+        <>
+          <Image
+            src={poster}
+            alt=""
+            fill
+            sizes="100vw"
+            priority
+            aria-hidden="true"
+            className="scale-105 bg-muted object-cover opacity-30 blur-2xl"
+          />
+          <div aria-hidden="true" className="absolute inset-0 bg-black/45" />
+        </>
+      ) : (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-gradient-to-b from-zinc-900 to-black"
+        />
+      )}
+
+      <div className="relative flex flex-col items-center gap-3 px-6 text-center">
+        <Loader2
+          className="size-9 animate-spin text-primary"
+          aria-hidden="true"
+        />
+        {title ? (
+          <p className="max-w-xs text-sm font-semibold text-white/90">
+            {title}
+          </p>
+        ) : null}
+        <p className="text-xs text-white/60">{message}</p>
+      </div>
+    </div>
+  )
+}
+
 export function VideoPlayer({
   url,
   label,
   variants,
   onUnresolved,
   onUrlChange,
+  poster,
+  onEnded,
 }: {
   url: string | null
   label?: string
@@ -91,6 +151,10 @@ export function VideoPlayer({
   onUnresolved?: (url: string) => void
   /** Parent handler to swap the active source (in-player quality switch). */
   onUrlChange?: (url: string) => void
+  /** Poster image shown behind the loading/error overlays. */
+  poster?: string | null
+  /** Fired when playback reaches the end of the media. */
+  onEnded?: () => void
 }) {
   // Dev/QA escape hatch: ?vsrc=<url> bypasses link resolution. Guarded for
   // SSR — client components still pre-render on the server.
@@ -500,9 +564,9 @@ export function VideoPlayer({
 
     const start = () => {
       for (const u of siblings) {
-        fetch(`/api/resolve?url=${encodeURIComponent(u)}`).catch(err => {
+        fetch(`/api/resolve?url=${encodeURIComponent(u)}`).catch((err) => {
           // Log prefetch errors for debugging but don't affect playback
-          if (process.env.NODE_ENV !== 'production') {
+          if (process.env.NODE_ENV !== "production") {
             console.warn(`Prefetch failed for ${u}:`, err)
           }
         })
@@ -612,6 +676,76 @@ export function VideoPlayer({
         if (trySeek()) clearInterval(t)
       }, 200)
       setTimeout(() => clearInterval(t), 20_000)
+    }
+  }, [playSrc])
+
+  // Persisted resume: keep the last playback position per source and restore
+  // it on the next visit so returning to a title/episode picks up where the
+  // viewer left off (resume is skipped near the very end).
+  useEffect(() => {
+    if (!playSrc) return
+    const key = `vicine:resume:${stableKeyRef.current ?? ""}`
+    let stopped = false
+
+    const attach = (): boolean => {
+      const v = document.querySelector<HTMLVideoElement>(
+        ".media-default-skin video"
+      )
+      if (!v) return false
+
+      try {
+        const saved = Number(localStorage.getItem(key))
+        if (Number.isFinite(saved) && saved > 5 && v.duration > 0) {
+          if (saved < v.duration * 0.9) v.currentTime = saved
+        }
+      } catch {
+        // ignore storage errors
+      }
+
+      let lastSave = 0
+      const onTime = () => {
+        const now = Date.now()
+        if (now - lastSave < 5000) return
+        lastSave = now
+        try {
+          localStorage.setItem(key, String(v.currentTime))
+        } catch {
+          // ignore
+        }
+      }
+      const onPause = () => {
+        try {
+          localStorage.setItem(key, String(v.currentTime))
+        } catch {
+          // ignore
+        }
+      }
+      v.addEventListener("timeupdate", onTime)
+      v.addEventListener("pause", onPause)
+      const detach = () => {
+        v.removeEventListener("timeupdate", onTime)
+        v.removeEventListener("pause", onPause)
+      }
+      if (stopped) {
+        detach()
+        return true
+      }
+      cleanup = detach
+      return true
+    }
+
+    let cleanup: (() => void) | null = null
+    if (!attach()) {
+      const t = setInterval(() => {
+        if (stopped || attach()) clearInterval(t)
+      }, 200)
+      setTimeout(() => clearInterval(t), 20_000)
+      cleanup = () => clearInterval(t)
+    }
+
+    return () => {
+      stopped = true
+      cleanup?.()
     }
   }, [playSrc])
 
@@ -853,22 +987,32 @@ export function VideoPlayer({
       <div className="overflow-hidden rounded-xl">
         <div className="relative aspect-video w-full">
           {resolving && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black text-white"
-            >
-              <Loader2
-                className="size-8 animate-spin text-primary"
-                aria-hidden="true"
-              />
+            <div className="absolute inset-0 overflow-hidden bg-black">
+              {poster ? (
+                <Image
+                  src={poster}
+                  alt=""
+                  fill
+                  sizes="100vw"
+                  priority
+                  aria-hidden="true"
+                  className="bg-muted object-cover"
+                />
+              ) : (
+                <div
+                  aria-hidden="true"
+                  className="absolute inset-0 bg-gradient-to-b from-zinc-900 to-black"
+                />
+              )}
             </div>
           )}
           {playSrc && !error && (
             <VideoSkin
               key={playSrc}
               src={playSrc}
+              poster={poster ?? undefined}
               onError={handlePlayerError}
+              onEnded={onEnded}
               className="absolute inset-0 h-full w-full"
               tracks={subs}
               extractingLabel={
@@ -895,9 +1039,7 @@ export function VideoPlayer({
             />
           )}
           {!resolving && !playSrc && !error && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black">
-              <Loader2 className="size-8 animate-spin text-muted-foreground" />
-            </div>
+            <PlayerLoading poster={poster} message="Starting playback" />
           )}
         </div>
       </div>

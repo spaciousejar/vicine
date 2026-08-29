@@ -1,5 +1,5 @@
 import { MediaGrid } from "@/components/media-grid"
-import { AppPagination } from "@/components/pagination"
+import { InfiniteGrid } from "@/components/infinite-grid"
 import { CategoryFilter } from "@/components/category-filter"
 import { SiteHeader } from "@/components/site-header"
 import { RevealSection } from "@/components/reveal-section"
@@ -12,7 +12,6 @@ export function ListingShell({
   type,
   page,
   pages,
-  total,
   q,
 }: {
   title: string
@@ -21,9 +20,10 @@ export function ListingShell({
   type: ContentType
   page: number
   pages: number
-  total: number
   q: string
 }) {
+  const searchMode = q.trim().length > 0
+
   return (
     <div className="min-h-svh bg-background">
       <SiteHeader />
@@ -42,14 +42,27 @@ export function ListingShell({
               <span className="font-medium text-foreground">
                 &quot;{q}&quot;
               </span>{" "}
-              — {items.length} {items.length === 1 ? "title" : "titles"}
+              {items.length} {items.length === 1 ? "title" : "titles"}
             </p>
           )}
         </div>
-        <RevealSection>
-          <MediaGrid items={items} type={type} />
-        </RevealSection>
-        {!q && <AppPagination page={page} pages={pages} total={total} />}
+
+        {searchMode ? (
+          <RevealSection className="mt-6">
+            <MediaGrid items={items} type={type} />
+          </RevealSection>
+        ) : (
+          <div className="mt-6">
+            <InfiniteGrid
+              type={type}
+              initialItems={items}
+              initialPage={page}
+              initialPages={pages}
+              q={q}
+              limit={24}
+            />
+          </div>
+        )}
       </main>
     </div>
   )

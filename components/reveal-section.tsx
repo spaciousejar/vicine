@@ -1,4 +1,7 @@
+"use client"
+
 import type { ReactNode } from "react"
+import { motion, useReducedMotion } from "motion/react"
 
 interface RevealSectionProps {
   children: ReactNode
@@ -11,14 +14,17 @@ export function RevealSection({
   delay = 0,
   className,
 }: RevealSectionProps) {
+  const reduce = useReducedMotion()
+
   return (
-    <section
+    <motion.section
       className={className}
-      style={{
-        animationDelay: delay ? `${delay}s` : undefined,
-      }}
+      initial={reduce ? false : { opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.15 }}
+      transition={{ duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] }}
     >
       {children}
-    </section>
+    </motion.section>
   )
 }
