@@ -1,21 +1,54 @@
-# Next.js template
+# VICINE
 
-This is a Next.js template with shadcn/ui.
+A streaming platform for movies, anime, and series — every story, one screen.
 
-## Adding components
+## Tech Stack
 
-To add components to your app, run the following command:
+- **Framework:** Next.js 16 (App Router)
+- **UI:** shadcn/ui, Tailwind CSS 4, Framer Motion
+- **Runtime:** Cloudflare Workers (via OpenNext)
+- **Package Manager:** Bun
+- **Testing:** Bun test
+- **Video:** next-video + Video.js
+
+## Getting Started
 
 ```bash
-npx shadcn@latest add button
+# install dependencies
+bun install
+
+# run dev server
+bun run dev
+
+# open http://localhost:3000
 ```
 
-This will place the ui components in the `components` directory.
+## Scripts
 
-## Using components
+| Command             | Description                     |
+| ------------------- | ------------------------------- |
+| `bun run dev`       | Start dev server                |
+| `bun run build`     | Production build                |
+| `bun run start`     | Start production server         |
+| `bun run lint`      | ESLint                          |
+| `bun run typecheck` | TypeScript check                |
+| `bun run format`    | Prettier format                 |
+| `bun run test`      | Run tests                       |
+| `bun run deploy`    | Build and deploy to Cloudflare  |
+| `bun run preview`   | Build and preview on Cloudflare |
 
-To use the components in your app, import them as follows:
+## Deployment
 
-```tsx
-import { Button } from "@/components/ui/button";
+The app is deployed to Cloudflare Workers using OpenNext:
+
+```bash
+bun run deploy
+```
+
+This runs `opennextjs-cloudflare build` followed by `opennextjs-cloudflare deploy`.
+
+The resolve worker (for URL resolution) deploys separately:
+
+```bash
+bun run deploy:resolve
 ```

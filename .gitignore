@@ -48,3 +48,6 @@ public/_next-video
 
 # local test directory
 /vicine-test
+
+# graphify output
+/graphify-out/
