@@ -1,6 +1,11 @@
 import { ListingShell } from "@/components/listing-page"
 import { fetchMovies, searchContent } from "@/lib/api"
 
+// ISR: cache the rendered page (backed by the R2 incremental cache) and
+// regenerate it every 5 minutes instead of re-rendering + re-fetching on
+// every hit.
+export const revalidate = 300
+
 export default async function MoviesPage({
   searchParams,
 }: {

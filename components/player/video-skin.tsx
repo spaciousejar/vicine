@@ -218,6 +218,11 @@ export function VideoPlayer({
           render={(props) => (
             <div {...props} className="media-buffering-indicator">
               {poster ? (
+                // Decorative aria-hidden backdrop in the buffering state —
+                // a bare <img> avoids routing a blur-16px placeholder through
+                // the next/image optimizer (extra fetch in a failure-recovery
+                // state, and CSS anchoring in this custom skin depends on it).
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={poster}
                   alt=""

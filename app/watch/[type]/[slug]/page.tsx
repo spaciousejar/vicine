@@ -3,6 +3,8 @@ import { fetchBySlug, fetchRelated } from "@/lib/api"
 import type { ContentType } from "@/lib/api"
 import { WatchInnerClient } from "./watch-inner"
 
+export const revalidate = 300
+
 export default async function WatchPage({
   params,
 }: {

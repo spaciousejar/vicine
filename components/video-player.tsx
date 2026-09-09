@@ -333,8 +333,9 @@ export function VideoPlayer({
     return () => {
       cancelled = true
     }
-    // All dependencies are now properly declared
-  }, [url, resolveAttempt, autoMode, variants])
+    // vsrcOverride is read once (never re-set), tierTargetUrl is derived
+    // from variants/url which are already deps — neither causes extra runs.
+  }, [url, resolveAttempt, autoMode, variants, vsrcOverride, tierTargetUrl])
 
   // Firefox/Safari cannot demux MKV natively while Chrome tolerates it.
   // Route non-HLS sources through the server-side transmux proxy when the

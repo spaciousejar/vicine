@@ -26,6 +26,7 @@ export function HomeHero({ hero }: { hero: MediaItem }) {
               fill
               priority
               loading="eager"
+              fetchPriority="high"
               sizes="(max-width: 768px) 100vw, (max-width: 1280px) 55vw, 700px"
               className="object-cover"
             />

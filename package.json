@@ -12,9 +12,11 @@
     "test": "bun test",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "deploy": "bun run build:worker && opennextjs-cloudflare deploy",
     "deploy:resolve": "wrangler deploy -c worker/wrangler.jsonc",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
+    "preview": "bun run build:worker && opennextjs-cloudflare preview",
+    "upload": "bun run build:worker && opennextjs-cloudflare upload",
+    "build:worker": "opennextjs-cloudflare build && node ops/patch-images-cache.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

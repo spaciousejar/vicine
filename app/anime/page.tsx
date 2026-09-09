@@ -1,6 +1,8 @@
 import { ListingShell } from "@/components/listing-page"
 import { fetchAnime, searchContent } from "@/lib/api"
 
+export const revalidate = 300
+
 export default async function AnimePage({
   searchParams,
 }: {

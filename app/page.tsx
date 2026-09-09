@@ -108,7 +108,7 @@ function Section({
             "shrink-0"
           )}
         >
-          View all →
+          View all {title} →
         </Link>
       </div>
       <Suspense fallback={<MediaGridSkeleton count={6} />}>

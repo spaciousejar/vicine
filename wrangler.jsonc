@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "vicine",
   "compatibility_date": "2026-08-25",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "main": ".open-next/worker.js",
   "observability": {
     "enabled": true,
@@ -17,4 +17,19 @@
       "service": "vicine",
     },
   ],
+  "r2_buckets": [
+    // R2 incremental cache (ISR). Create the bucket once before deploying:
+    //   npx wrangler r2 bucket create vicine-opennext-cache
+    {
+      "binding": "NEXT_INC_CACHE_R2_BUCKET",
+      "bucket_name": "vicine-opennext-cache",
+    },
+  ],
+  "images": {
+    // Workers Images binding — enables real resizing/re-encoding of the
+    // /_next/image requests instead of streaming the original 2000x3000
+    // posters (the #1 Lighthouse byte payload). Requires the account to have
+    // Workers Images enabled; remove this block if the plan does not include it.
+    "binding": "IMAGES",
+  },
 }

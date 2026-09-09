@@ -2,7 +2,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import type { MediaItem } from "@/lib/api"
-import { getContentType, getDisplayCategories, getYear } from "@/lib/api"
+import { getContentType, getYear } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 // Ranked horizontal scroller — oversized stroked rank numerals overlapping
@@ -20,9 +20,12 @@ export function TrendingRow({ items }: { items: MediaItem[] }) {
             <Link
               key={item._id ?? item.url_slug}
               href={`/watch/${getContentType(item)}/${item.url_slug}`}
-              aria-label={`Number ${i + 1} trending: ${item.title}`}
               className="group relative shrink-0 snap-start items-end pt-6 sm:pt-8"
             >
+              {/* Screen-reader prefix; the visible rank numeral below stays
+                  aria-hidden so the accessible name still contains every word
+                  shown on the card (WCAG 2.5.3 label-in-name). */}
+              <span className="sr-only">Number {i + 1} trending: </span>
               {/* Rank numeral — smaller on mobile to avoid overflow */}
               <span
                 aria-hidden="true"

@@ -150,6 +150,7 @@ function SiteHeaderInner() {
           searchOpen ? "max-h-24 opacity-100" : "max-h-0 opacity-0"
         )}
         aria-hidden={!searchOpen}
+        inert={!searchOpen}
       >
         <form
           onSubmit={onSearch}
@@ -183,6 +184,7 @@ function SiteHeaderInner() {
           menuOpen ? "max-h-80 opacity-100" : "max-h-0 opacity-0"
         )}
         aria-hidden={!menuOpen}
+        inert={!menuOpen}
       >
         <nav
           aria-label="Mobile"

@@ -51,3 +51,7 @@ public/_next-video
 
 # graphify output
 /graphify-out/
+
+# opennextjs-cloudflare build output
+/.open-next/
+/.wrangler/
