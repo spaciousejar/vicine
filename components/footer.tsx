@@ -56,7 +56,9 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Quality */}
+          {/* Quality — ?q= is the listing pages' only filter param, so the
+              quality shortcuts route through it (a ?quality= param is not
+              read anywhere). */}
           <div>
             <h3 className="mb-3 text-sm font-semibold text-foreground">
               Quality
@@ -64,7 +66,7 @@ export function Footer() {
             <ul className="space-y-2">
               <li>
                 <Link
-                  href="/movies?quality=1080p"
+                  href="/movies?q=1080p"
                   className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
                   1080p
@@ -72,7 +74,7 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  href="/movies?quality=720p"
+                  href="/movies?q=720p"
                   className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
                   720p
@@ -80,7 +82,7 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  href="/movies?quality=480p"
+                  href="/movies?q=480p"
                   className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
                   480p
