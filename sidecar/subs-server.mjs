@@ -40,6 +40,15 @@ for (const f of fs.readdirSync(CACHE_DIR)) {
   }
 }
 
+// Per-request temp suffix. A PID-based suffix made two concurrent
+// extractions for the same key write into the SAME file (one process),
+// interleaving ffmpeg output and racing the rename into the cache.
+let partCounter = 0
+function partPath(cached) {
+  partCounter = (partCounter + 1) % Number.MAX_SAFE_INTEGER
+  return `${cached}.${process.pid}-${partCounter}.part`
+}
+
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
@@ -174,7 +183,7 @@ async function extract(url, index, res, key) {
     fs.createReadStream(cached).pipe(res)
     return
   }
-  const tmp = `${cached}.${process.pid}.part`
+  const tmp = partPath(cached)
   const args = [
     "-nostdin",
     "-user_agent",
@@ -368,7 +377,7 @@ const server = http.createServer(async (req, res) => {
       // ffmpeg's webvtt output is block-buffered on pipes (cues would sit
       // in stdio until exit), so write to a file and tail it to the client
       // as it grows. On clean completion the .part promotes to cache.
-      const tmp = `${cachePath(key, url, index)}.${process.pid}.part`
+      const tmp = partPath(cachePath(key, url, index))
       const child = spawn(
         FFMPEG,
         [
