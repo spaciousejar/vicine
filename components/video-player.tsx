@@ -574,6 +574,7 @@ export function VideoPlayer({
     prefetchedKeyRef.current = key
 
     const start = () => {
+      if (cancelled) return
       for (const u of siblings) {
         fetch(`/api/resolve?url=${encodeURIComponent(u)}`).catch((err) => {
           // Log prefetch errors for debugging but don't affect playback
@@ -583,15 +584,24 @@ export function VideoPlayer({
         })
       }
     }
-    const v = document.querySelector<HTMLVideoElement>(
-      ".media-default-skin video"
-    )
-    if (v && v.readyState >= 2) {
-      setTimeout(start, 1500) // let the current source grab bandwidth first
-    } else {
-      v?.addEventListener("playing", () => setTimeout(start, 1500), {
-        once: true,
-      })
+    let cancelled = false
+    let delayTimer: ReturnType<typeof setTimeout> | undefined
+    const startOnceVideoReady = () => {
+      delayTimer = setTimeout(start, 1500) // let the current source grab bandwidth first
+    }
+    // waitForVideo instead of a one-shot query: the skin mounts its media
+    // element through Suspense, so it may not exist yet when this runs.
+    void waitForVideo().then((v) => {
+      if (cancelled || !v) return
+      if (v.readyState >= 2) {
+        startOnceVideoReady()
+      } else {
+        v.addEventListener("playing", startOnceVideoReady, { once: true })
+      }
+    })
+    return () => {
+      cancelled = true
+      if (delayTimer) clearTimeout(delayTimer)
     }
   }, [playSrc, videoUrl, variants])
 
