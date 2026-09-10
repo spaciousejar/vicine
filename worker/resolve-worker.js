@@ -176,7 +176,9 @@ const workerHandler = {
 
       const host = parsed.hostname
       const isWorker = host.endsWith(".workers.dev")
-      const isVcloud = host.includes("vcloud.fit")
+      // Exact/suffix match, mirroring app/api/resolve/route.ts — a bare
+      // substring would accept lookalikes like vcloud.fit.evil.com.
+      const isVcloud = host === "vcloud.fit" || host.endsWith(".vcloud.fit")
       if (!isWorker && !isVcloud)
         return json({ error: "Unsupported host" }, 400)
 
