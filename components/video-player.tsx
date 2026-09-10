@@ -14,10 +14,20 @@ import {
 
 const HLS_EXT = /\.m3u8($|\?)/i
 const MKV_EXT = /\.mkv($|\?)/i
+// The transmux proxy needs spawn("ffmpeg") + tmpfs, which the Cloudflare
+// Workers deploy cannot provide. NEXT_PUBLIC_TRANSMUX_AVAILABLE is set to
+// "1" at build time only for Node-hosted deploys; absent/false keeps the
+// client on direct playback so non-Chromium browsers don't burn the 10–20s
+// stuck-timer against a proxy that can never respond.
+const TRANSMUX_AVAILABLE =
+  process.env.NEXT_PUBLIC_TRANSMUX_AVAILABLE === "1"
 // Firefox/Safari/iOS cannot demux MKV natively — route through the
-// server-side transmux proxy immediately instead of waiting for an error.
+// server-side transmux proxy immediately instead of waiting for an error
+// (only when the proxy actually exists on the server).
 const SHOULD_USE_TRANSMUX_PROXY =
-  typeof navigator !== "undefined" && !/Chrome\//.test(navigator.userAgent)
+  TRANSMUX_AVAILABLE &&
+  typeof navigator !== "undefined" &&
+  !/Chrome\//.test(navigator.userAgent)
 
 // ---------------------------------------------------------------------------
 // Network-adaptive quality (Auto mode)
