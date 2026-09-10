@@ -15,7 +15,7 @@ jobs:
     name: Typecheck, lint, test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # pins + cache come from the "packageManager" field in package.json
       - uses: oven-sh/setup-bun@v2
