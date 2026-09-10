@@ -1,0 +1,34 @@
+# Weekly dependency updates. Alerts alone only flag known CVEs — these
+# manifests make Dependabot also open version-bump PRs so the tree stays
+# near-latest and vulnerable ranges expire quickly.
+version: 2
+
+updates:
+  # npm dependencies — grouped so weekly bumps land as one reviewable PR
+  # instead of ~30 separate ones.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    # Runtime framework bumps can change behavior; keep them visible as
+    # standalone PRs rather than buried in the group.
+    ignore:
+      # next is pinned deliberately (currently 16.3.3 — the first patched
+      # release for the Image-Optimization RCE advisories); major bumps get
+      # reviewed manually.
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions — keeps ci.yml's checkout/setup-bun pins fresh.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Bun locks are updated by the npm ecosystem entry (bun.lock is supported)
+  # via `bun install` in the workflow; no separate bun ecosystem exists.
