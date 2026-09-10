@@ -122,6 +122,19 @@ function looksPlayable(
   return true
 }
 
+// Audits (x-probe: 1) bypass the cache entirely, on both reads AND writes:
+// probe traffic must not poison the cache real users read from, on success
+// or failure.
+function maybeCachePut(
+  probing: boolean,
+  key: string,
+  payload: object,
+  ttl?: number
+) {
+  if (probing) return
+  cachePut(key, payload, ttl)
+}
+
 async function isPlayable(
   url: string,
   trace?: Record<string, unknown>[]
@@ -357,7 +370,7 @@ export async function GET(req: NextRequest) {
             title: data.title,
             size: data.size,
           }
-          cachePut(cacheKey, payload)
+          maybeCachePut(probing, cacheKey, payload)
           return NextResponse.json(payload)
         }
       } catch {
@@ -386,7 +399,7 @@ export async function GET(req: NextRequest) {
             title: data.title,
             size: data.size,
           }
-          cachePut(cacheKey, payload)
+          maybeCachePut(probing, cacheKey, payload)
           return NextResponse.json(payload)
         }
         if (data.trace)
@@ -483,7 +496,7 @@ export async function GET(req: NextRequest) {
 
       if (winnerUrl) {
         const payload = { videoUrl: winnerUrl, title, size }
-        cachePut(cacheKey, payload)
+        maybeCachePut(probing, cacheKey, payload)
         return NextResponse.json(payload)
       }
 
@@ -521,7 +534,7 @@ export async function GET(req: NextRequest) {
           }
           // Tokens are single-use/short-lived: a long TTL here would serve
           // dead links from cache long after the signatures expired.
-          cachePut(cacheKey, payload, 45_000)
+          maybeCachePut(probing, cacheKey, payload, 45_000)
           return NextResponse.json(payload)
         }
       }
@@ -536,14 +549,14 @@ export async function GET(req: NextRequest) {
         goUrl: url,
         goUrls: [{ type: "direct", url }],
       }
-      if (!probing) cachePut(cacheKey, fallbackPayload, 45_000)
+      maybeCachePut(probing, cacheKey, fallbackPayload, 45_000)
       return NextResponse.json(fallbackPayload)
     }
 
     // Negative-cache so repeat clicks on a dead link fail fast instead of
     // re-running the full chain for the next few minutes. Probe-bypassed
     // audits must not poison real-user caches.
-    if (!probing) cachePut(cacheKey, FAILED_PAYLOAD, NEGATIVE_TTL_MS)
+    maybeCachePut(probing, cacheKey, FAILED_PAYLOAD, NEGATIVE_TTL_MS)
     return NextResponse.json(
       debug ? { ...FAILED_PAYLOAD, trace } : FAILED_PAYLOAD,
       { status: 502 }
