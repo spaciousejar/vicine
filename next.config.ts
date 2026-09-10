@@ -11,7 +11,10 @@ const SECURITY_HEADERS = [
       "default-src 'self'",
       "base-uri 'self'",
       "object-src 'none'",
-      "frame-src 'none'",
+      // The player's last-resort fallback embeds the source page itself
+      // (vcloud / resolver-worker / mirror hosts), so frames must be
+      // permitted for HTTPS origins. Everything else stays locked down.
+      "frame-src https:",
       "frame-ancestors 'none'",
       "form-action 'self'",
       "manifest-src 'self'",
