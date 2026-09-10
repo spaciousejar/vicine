@@ -830,10 +830,15 @@ export function VideoPlayer({
     )
     if (!v) return
 
+    // The <track> element in the skin creates an empty TextTrack for every
+    // entry — that's what lists it in the captions menu. An existing track
+    // only counts as "already extracted" when it actually has cues; an empty
+    // one means extraction hasn't run (or failed) yet, so stream cues into
+    // it instead of bailing out (which used to make embedded subs dead).
     const existing = Array.from(v.textTracks).find(
       (t) => t.label === track.label
     )
-    if (existing) {
+    if (existing && countCues(existing) > 0) {
       existing.mode = "showing"
       return
     }
@@ -842,7 +847,8 @@ export function VideoPlayer({
     liveStreamsRef.current.set(track.id, ac)
     setPendingSub(track.id)
 
-    const textTrack = v.addTextTrack("subtitles", track.label, track.lang)
+    const textTrack =
+      existing ?? v.addTextTrack("subtitles", track.label, track.lang)
     textTrack.mode = "showing"
 
     const parser = createCueStreamParser((cue) => {
@@ -871,14 +877,22 @@ export function VideoPlayer({
       }
     } catch {
       if (countCues(textTrack) === 0) {
-        try {
-          ;(
-            v as HTMLVideoElement & { removeTextTrack(t: TextTrack): void }
-          ).removeTextTrack(textTrack)
-        } catch {}
-        try {
-          textTrack.mode = "disabled"
-        } catch {}
+        if (existing) {
+          // Element-owned track: React owns its lifecycle, so hide it
+          // rather than removing it from under the <track> element.
+          try {
+            textTrack.mode = "disabled"
+          } catch {}
+        } else {
+          try {
+            ;(
+              v as HTMLVideoElement & { removeTextTrack(t: TextTrack): void }
+            ).removeTextTrack(textTrack)
+          } catch {}
+          try {
+            textTrack.mode = "disabled"
+          } catch {}
+        }
       }
     } finally {
       liveStreamsRef.current.delete(track.id)
