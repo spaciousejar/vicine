@@ -42,7 +42,11 @@ export function InfiniteGrid({
         if (loadingRef.current || !hasMore) return
         loadMore()
       },
-      { rootMargin: "600px 0px 0px 0px" }
+      // Expand the viewport's BOTTOM edge: the sentinel sits below the
+      // grid, so preloading must trigger while it is still 600px ahead of
+      // the user's scroll position (a top margin never fires on the way
+      // down).
+      { rootMargin: "0px 0px 600px 0px" }
     )
 
     const sentinel = sentinelRef.current
