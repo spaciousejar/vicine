@@ -51,8 +51,6 @@
     "typescript": "^5.9.3"
   },
   "overrides": {
-    // miniflare pins sharp 0.35.2 (libvips CVEs, GHSA advisory #11/#33);
-    // 0.35.4 is API-compatible and is what the rest of the tree uses.
     "sharp": "0.35.4"
   }
 }
