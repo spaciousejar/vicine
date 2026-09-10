@@ -52,19 +52,12 @@ function timedFetch(
 // at loopback/private/link-local addresses (SSRF protection).
 const BLOCKED_HOST_PATTERNS = [/^localhost$/i, /\.local$/i, /\.internal$/i]
 
-function isPrivateIp(hostname: string): boolean {
-  if (!/^[0-9.:]+$/.test(hostname)) return false
-  if (
-    hostname === "::1" ||
-    hostname === "[::1]" ||
-    hostname.startsWith("fc") ||
-    hostname.startsWith("fd") ||
-    hostname.startsWith("fe8")
-  ) {
+function isPrivateIPv4(host: string): boolean {
+  // Only dotted-quads are IPv4; callers pass hostnames through untouched.
+  if (!/^\d+(\.\d+)*$/.test(host)) return false
+  const parts = host.split(".").map((p) => parseInt(p, 10))
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p > 255))
     return true
-  }
-  const parts = hostname.split(".").map((p) => parseInt(p, 10))
-  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p))) return true
   const [a, b] = parts
   if (a === 0 || a === 10 || a === 127) return true
   if (a === 169 && b === 254) return true
@@ -72,6 +65,35 @@ function isPrivateIp(hostname: string): boolean {
   if (a === 192 && b === 168) return true
   if (a >= 224) return true
   return false
+}
+
+function isPrivateIp(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase()
+
+  // IPv6 literals contain a colon. The old pre-filter rejected anything
+  // with letters, which let hex forms like [::ffff:a9fe:a9fe] (IPv4-mapped
+  // 169.254.169.254) pass as "public" — they're not.
+  if (host.includes(":")) {
+    if (host === "::" || host === "::1") return true
+    if (/^f[cd]/.test(host)) return true // unique-local fc00::/7
+    if (/^fe[89ab]/.test(host)) return true // link-local fe80::/10
+    // IPv4-mapped ::ffff:a.b.c.d (dotted) ...
+    const dotted = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+    if (dotted) return isPrivateIPv4(dotted[1])
+    // ... or hex — decode the embedded v4 and re-check it.
+    const hex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+    if (hex) {
+      const hi = parseInt(hex[1], 16)
+      const lo = parseInt(hex[2], 16)
+      return isPrivateIPv4(
+        `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`
+      )
+    }
+    // Remaining global-unicast IPv6 is allowed.
+    return false
+  }
+
+  return isPrivateIPv4(host)
 }
 
 function isSafeHopUrl(url: string): boolean {
