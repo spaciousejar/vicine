@@ -49,10 +49,17 @@ export async function GET(req: NextRequest) {
   const index = req.nextUrl.searchParams.get("index") ?? "0"
   // Stable per-source identity so sidecar caches survive signed-url rotation
   const stableKey = (req.nextUrl.searchParams.get("key") || "").slice(0, 300)
+  // stream=1 selects the sidecar's tail-as-it-grows endpoint: cues arrive
+  // while ffmpeg is still reading the file instead of after the whole
+  // extraction finishes.
+  const stream =
+    mode === "extract" && req.nextUrl.searchParams.get("stream") === "1"
 
   const target =
     mode === "extract"
-      ? `${SIDECAR}/extract?url=${encodeURIComponent(url)}&index=${index}&key=${encodeURIComponent(stableKey)}`
+      ? stream
+        ? `${SIDECAR}/extract-stream?url=${encodeURIComponent(url)}&index=${index}&key=${encodeURIComponent(stableKey)}`
+        : `${SIDECAR}/extract?url=${encodeURIComponent(url)}&index=${index}&key=${encodeURIComponent(stableKey)}`
       : mode === "audio"
         ? `${SIDECAR}/audio?url=${encodeURIComponent(url)}&index=${index}`
         : `${SIDECAR}/list?url=${encodeURIComponent(url)}`
@@ -87,12 +94,23 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // subtitles (extract)
+    // subtitles (extract). Streaming responses pipe through untouched so
+    // cues reach the player as ffmpeg produces them; buffered responses
+    // complete before the body is read.
     if (!upstream.ok) {
       return NextResponse.json(
         { error: "extraction failed" },
         { status: upstream.status }
       )
+    }
+    if (stream && upstream.body) {
+      return new NextResponse(upstream.body, {
+        status: 200,
+        headers: {
+          "content-type": "text/vtt",
+          "cache-control": "no-store",
+        },
+      })
     }
     const vtt = await upstream.text()
     return new NextResponse(vtt, {
