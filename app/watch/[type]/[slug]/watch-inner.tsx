@@ -22,6 +22,19 @@ import { MediaGrid } from "@/components/media-grid"
 import { RevealSection } from "@/components/reveal-section"
 import { cn } from "@/lib/utils"
 
+// Locale-pinned, timezone-stable date formatting: client components render
+// on both server and browser, so the default locale must not leak into the
+// output (React 19 hydration mismatch) and invalid/missing dates must not
+// print "Invalid Date".
+const DATE_FORMAT = new Intl.DateTimeFormat("en", { dateStyle: "medium" })
+
+function formatDate(value: string | null | undefined): string | null {
+  if (!value) return null
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return null
+  return DATE_FORMAT.format(d)
+}
+
 export function WatchInnerClient({
   item,
   type,
@@ -337,7 +350,7 @@ export function WatchInnerClient({
                     <span className="font-medium text-foreground">
                       Updated:
                     </span>{" "}
-                    {new Date(item.modified_date).toLocaleDateString()}
+                    {formatDate(item.modified_date) ?? "Unknown"}
                   </p>
                   <p>
                     <span className="font-medium text-foreground">Status:</span>{" "}
