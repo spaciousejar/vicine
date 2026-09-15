@@ -328,6 +328,7 @@ export function WatchInnerClient({
                     src={img}
                     alt={item.title}
                     fill
+                    priority
                     sizes="(max-width: 1024px) 100vw, 33vw"
                     className="object-cover"
                   />

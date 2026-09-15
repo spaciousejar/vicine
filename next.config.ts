@@ -56,6 +56,13 @@ const SECURITY_HEADERS = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   images: {
+    // Dev-only: the optimizer's upstream fetch has a hardcoded 7s timeout
+    // (next/dist/esm/server/image-optimizer.js) and a page of posters fires
+    // dozens of parallel fetches at storage.hicine.sbs, which throttles
+    // concurrent connections past that timeout — every poster 500s in dev.
+    // Serve the CDN's original webp in dev; production keeps optimization
+    // (its responses are cached at the edge by the images-cache patch).
+    unoptimized: isDev,
     remotePatterns: [
       { protocol: "https", hostname: "storage.hicine.sbs" },
       { protocol: "https", hostname: "**.hicine.sbs" },
