@@ -19,8 +19,7 @@ const MKV_EXT = /\.mkv($|\?)/i
 // "1" at build time only for Node-hosted deploys; absent/false keeps the
 // client on direct playback so non-Chromium browsers don't burn the 10–20s
 // stuck-timer against a proxy that can never respond.
-const TRANSMUX_AVAILABLE =
-  process.env.NEXT_PUBLIC_TRANSMUX_AVAILABLE === "1"
+const TRANSMUX_AVAILABLE = process.env.NEXT_PUBLIC_TRANSMUX_AVAILABLE === "1"
 // Firefox/Safari/iOS cannot demux MKV natively — route through the
 // server-side transmux proxy immediately instead of waiting for an error
 // (only when the proxy actually exists on the server).
@@ -28,6 +27,25 @@ const SHOULD_USE_TRANSMUX_PROXY =
   TRANSMUX_AVAILABLE &&
   typeof navigator !== "undefined" &&
   !/Chrome\//.test(navigator.userAgent)
+
+// Audio codecs HTML5 <video> can decode natively. Everything else
+// (eac3/ac3/dts/truehd/mp2…) plays as a silent picture on most browsers
+// and must go through the sidecar's AAC remux to be audible.
+const NATIVE_AUDIO_CODECS = new Set([
+  "aac",
+  "mp3",
+  "mp2",
+  "opus",
+  "vorbis",
+  "flac",
+  "alac",
+  "pcm_s16le",
+  "pcm_s16be",
+  "pcm_s24le",
+  "pcm_s32le",
+  "pcm_f32le",
+  "pcm_u8",
+])
 
 // ---------------------------------------------------------------------------
 // Network-adaptive quality (Auto mode)
@@ -810,18 +828,37 @@ export function VideoPlayer({
           })
         }
 
-        if (data?.audioTracks?.length > 1) {
-          const opts = data.audioTracks.map(
-            (a: { index: number; lang?: string; title?: string }) => ({
-              id: String(a.index),
-              label:
-                a.title ||
-                (a.lang && a.lang !== "und"
-                  ? a.lang.toUpperCase()
-                  : `Track ${a.index + 1}`),
-            })
-          )
+        const audioTracks: {
+          index: number
+          lang?: string
+          title?: string
+          codec?: string
+        }[] = data?.audioTracks ?? []
+        const firstCodec = String(audioTracks[0]?.codec ?? "").toLowerCase()
+        const firstNonNative = !NATIVE_AUDIO_CODECS.has(firstCodec)
+
+        // Show the audio menu when there is more than one track (as before)
+        // or when the single default track needs the remux to be audible.
+        if (
+          audioTracks.length > 1 ||
+          (audioTracks.length === 1 && firstNonNative)
+        ) {
+          const opts = audioTracks.map((a) => ({
+            id: String(a.index),
+            label:
+              a.title ||
+              (a.lang && a.lang !== "und"
+                ? a.lang.toUpperCase()
+                : `Track ${a.index + 1}`),
+          }))
           setAudioOptions([{ id: "default", label: "Original" }, ...opts])
+        }
+
+        // The browser plays the file's first audio stream; when it cannot
+        // decode it the movie is silently muted, so auto-switch to the AAC
+        // remux of that track instead of leaving playback dead.
+        if (firstNonNative) {
+          setActiveAudioId(String(audioTracks[0].index))
         }
       })
       .catch(() => {})
