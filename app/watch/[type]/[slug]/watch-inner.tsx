@@ -261,8 +261,8 @@ export function WatchInnerClient({
             player → title/meta → episodes, so you can see what you're watching
             without scrolling past the whole episode list. On lg the info card
             moves into the right column and spans both rows. */}
-        <div className="grid gap-6 lg:grid-cols-[1.6fr_0.9fr] lg:items-start">
-          <div className="space-y-4 lg:col-start-1 lg:row-start-1">
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[1.6fr_0.9fr] lg:items-start">
+          <div className="min-w-0 space-y-4 lg:col-start-1 lg:row-start-1">
             <div className="relative">
               <VideoPlayer
                 url={url}
@@ -318,7 +318,7 @@ export function WatchInnerClient({
             </div>
           </div>
 
-          <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+          <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
             <Card className="overflow-hidden py-0">
               {/* A 2:3 poster at full width is a ~500px-tall wall on a phone,
                   so crop to a banner until the card is in its own column. */}
@@ -364,7 +364,7 @@ export function WatchInnerClient({
             </Card>
           </div>
 
-          <div className="lg:col-start-1 lg:row-start-2">
+          <div className="min-w-0 lg:col-start-1 lg:row-start-2">
             {isMovie ? (
               <Card>
                 <CardHeader className="pb-2">
