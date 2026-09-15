@@ -16,7 +16,7 @@ export default async function AnimePage({
   return (
     <ListingShell
       title="Anime"
-      description="390 series, multi-season. Available in 480p / 720p / 1080p."
+      description={`${res.pagination.total.toLocaleString()} anime, multi-season. Available in 480p / 720p / 1080p.`}
       items={items}
       type="anime"
       page={q ? 1 : res.pagination.page}

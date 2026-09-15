@@ -19,7 +19,7 @@ export default async function MoviesPage({
   return (
     <ListingShell
       title="Movies"
-      description="10,134 titles in 480p / 720p / 1080p. Dual audio, WEB-DL."
+      description={`${res.pagination.total.toLocaleString()} Hollywood movies in 480p / 720p / 1080p. Dual audio, WEB-DL.`}
       items={items}
       type="movies"
       page={q ? 1 : res.pagination.page}

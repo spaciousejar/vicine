@@ -6,17 +6,44 @@ import { RevealSection } from "@/components/reveal-section"
 import { HomeHero } from "@/components/home-hero"
 import { Separator } from "@/components/ui/separator"
 import { buttonVariants } from "@/components/ui/button"
-import { fetchAnime, fetchMovies, fetchSeries, fetchTrending } from "@/lib/api"
-import { Film, Tv, Sparkles, Flame } from "lucide-react"
+import {
+  fetchAnime,
+  fetchBollyMovies,
+  fetchBollySeries,
+  fetchMovies,
+  fetchRecent,
+  fetchSeries,
+  fetchTrending,
+} from "@/lib/api"
+import {
+  Clapperboard,
+  Clock,
+  Film,
+  Flame,
+  ListVideo,
+  Sparkles,
+  Tv,
+} from "lucide-react"
 import { TrendingRow, TrendingRowSkeleton } from "@/components/trending-row"
 import { cn } from "@/lib/utils"
 
 export default async function HomePage() {
-  const [moviesRes, animeRes, seriesRes, trending] = await Promise.all([
+  const [
+    moviesRes,
+    animeRes,
+    seriesRes,
+    bollyMoviesRes,
+    bollySeriesRes,
+    trending,
+    recent,
+  ] = await Promise.all([
     fetchMovies(1, 12),
     fetchAnime(1, 12),
     fetchSeries(1, 12),
+    fetchBollyMovies(1, 12),
+    fetchBollySeries(1, 12),
     fetchTrending(12),
+    fetchRecent(12),
   ])
 
   const hero = moviesRes.data[0] ?? animeRes.data[0] ?? seriesRes.data[0]
@@ -45,6 +72,18 @@ export default async function HomePage() {
               <Separator />
             </>
           )}
+          {recent.length > 0 && (
+            <>
+              <RevealSection>
+                <Section
+                  title="New releases"
+                  icon={<Clock className="size-4" />}
+                  items={recent.slice(0, 6)}
+                />
+              </RevealSection>
+              <Separator />
+            </>
+          )}
           <RevealSection>
             <Section
               title="Movies"
@@ -52,6 +91,16 @@ export default async function HomePage() {
               href="/movies"
               items={moviesRes.data.slice(0, 6)}
               type="movies"
+            />
+          </RevealSection>
+          <Separator />
+          <RevealSection>
+            <Section
+              title="Bollywood Movies"
+              icon={<Clapperboard className="size-4" />}
+              href="/bolly-movies"
+              items={bollyMoviesRes.data.slice(0, 6)}
+              type="bolly_movies"
             />
           </RevealSection>
           <Separator />
@@ -74,6 +123,16 @@ export default async function HomePage() {
               type="series"
             />
           </RevealSection>
+          <Separator />
+          <RevealSection>
+            <Section
+              title="Bollywood Series"
+              icon={<ListVideo className="size-4" />}
+              href="/bolly-series"
+              items={bollySeriesRes.data.slice(0, 6)}
+              type="bolly_series"
+            />
+          </RevealSection>
         </div>
       </main>
     </div>
@@ -89,9 +148,9 @@ function Section({
 }: {
   title: string
   icon: React.ReactNode
-  href: string
+  href?: string
   items: import("@/lib/api").MediaItem[]
-  type: import("@/lib/api").ContentType
+  type?: import("@/lib/api").ContentType
 }) {
   return (
     <section>
@@ -100,16 +159,18 @@ function Section({
           {icon}
           {title}
         </h2>
-        <Link
-          href={href}
-          data-slot="button"
-          className={cn(
-            buttonVariants({ variant: "ghost", size: "sm" }),
-            "shrink-0"
-          )}
-        >
-          View all {title} →
-        </Link>
+        {href && (
+          <Link
+            href={href}
+            data-slot="button"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "sm" }),
+              "shrink-0"
+            )}
+          >
+            View all {title} →
+          </Link>
+        )}
       </div>
       <Suspense fallback={<MediaGridSkeleton count={6} />}>
         <MediaGrid items={items} type={type} />

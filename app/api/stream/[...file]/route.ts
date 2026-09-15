@@ -6,6 +6,7 @@ import { Readable } from "node:stream"
 import fs from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
+import { MEDIA_HOST_RE } from "@/lib/media-hosts"
 
 const STREAM_ROOT = path.join(os.tmpdir(), "vicine-streams")
 const IDLE_KILL_MS = 10 * 60_000
@@ -29,13 +30,6 @@ const jobs = g.__streamJobs
 function hashUrl(url: string): string {
   return createHash("sha1").update(url).digest("hex").slice(0, 16)
 }
-
-const MEDIA_HOST_RE = new RegExp(
-  "(^|\\.)(" +
-    ["vcloud.fit", "workers.dev", "googleusercontent.com", "r2.dev", "hicine.sbs"].join("|") +
-    ")$",
-  "i"
-);
 
 function isSafeSourceUrl(url: string): boolean {
   try {

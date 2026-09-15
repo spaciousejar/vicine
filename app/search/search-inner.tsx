@@ -7,6 +7,7 @@ import { MediaGrid, MediaGridSkeleton } from "@/components/media-grid"
 import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
 import type { ContentType, MediaItem } from "@/lib/api"
+import { CONTENT_TYPES } from "@/lib/api"
 
 interface SearchResult extends MediaItem {
   inferredType: ContentType
@@ -96,16 +97,14 @@ export function SearchPageInner() {
                   acc[t].push(item)
                   return acc
                 },
-                {
-                  movies: [] as SearchResult[],
-                  anime: [] as SearchResult[],
-                  series: [] as SearchResult[],
-                }
+                Object.fromEntries(
+                  CONTENT_TYPES.map((t) => [t, [] as SearchResult[]])
+                ) as Record<ContentType, SearchResult[]>
               )
 
-              return (["movies", "anime", "series"] as const)
-                .filter((t) => groups[t].length > 0)
-                .map((t) => <MediaGrid key={t} items={groups[t]} type={t} />)
+              return CONTENT_TYPES.filter((t) => groups[t].length > 0).map(
+                (t) => <MediaGrid key={t} items={groups[t]} type={t} />
+              )
             })()}
           </>
         ) : searched && query.trim() ? (
