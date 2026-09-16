@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { CONTENT_TYPES, fetchBySlug, fetchRelated } from "@/lib/api"
+import { fetchBySlug, fetchRelated, toContentType } from "@/lib/api"
 import type { ContentType } from "@/lib/api"
 import { WatchInnerClient } from "./watch-inner"
 
@@ -11,8 +11,8 @@ export default async function WatchPage({
   params: Promise<{ type: string; slug: string }>
 }) {
   const { type: rawType, slug } = await params
-  const type = rawType as ContentType
-  if (!CONTENT_TYPES.includes(type)) notFound()
+  const type = toContentType(rawType)
+  if (!type) notFound()
 
   const result = await fetchBySlug(slug)
   if (!result) notFound()
