@@ -6,7 +6,8 @@
   "packageManager": "bun@1.4.0",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "bun run build:worker",
+    "build:next": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "bun test",

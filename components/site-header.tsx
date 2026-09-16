@@ -7,6 +7,8 @@ import { Search, Menu, X } from "lucide-react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { getTypeRoute } from "@/lib/api"
+import type { ContentType } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const NAV = [
@@ -14,6 +16,7 @@ const NAV = [
   { href: "/movies", label: "Movies" },
   { href: "/anime", label: "Anime" },
   { href: "/series", label: "Series" },
+  { href: "/bolly-movies", label: "Bollywood" },
 ] as const
 
 function SiteHeaderInner() {
@@ -30,14 +33,18 @@ function SiteHeaderInner() {
     if (q.trim()) params.set("q", q.trim())
     else params.delete("q")
     params.delete("page")
-    const watchMatch = pathname.match(/^\/watch\/(movies|anime|series)\b/)
+    const watchMatch = pathname.match(
+      /^\/watch\/(movies|anime|series|bolly_movies|bolly_series)\b/
+    )
     const base =
       pathname.startsWith("/movies") ||
       pathname.startsWith("/anime") ||
-      pathname.startsWith("/series")
+      pathname.startsWith("/series") ||
+      pathname.startsWith("/bolly-movies") ||
+      pathname.startsWith("/bolly-series")
         ? pathname
         : watchMatch
-          ? "/" + watchMatch[1]
+          ? getTypeRoute(watchMatch[1] as ContentType)
           : "/movies"
     router.push(`${base}?${params.toString()}`)
     setSearchOpen(false)

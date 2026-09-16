@@ -36,7 +36,9 @@ fs.mkdirSync(CACHE_DIR, { recursive: true })
 // Sweep abandoned partial extractions from previous runs/crashes.
 for (const f of fs.readdirSync(CACHE_DIR)) {
   if (f.endsWith(".part")) {
-    try { fs.unlinkSync(path.join(CACHE_DIR, f)) } catch {}
+    try {
+      fs.unlinkSync(path.join(CACHE_DIR, f))
+    } catch {}
   }
 }
 
@@ -67,10 +69,24 @@ function fail(res, status, message) {
   res.end(JSON.stringify({ error: message }))
 }
 
+// SSRF allowlist — kept in sync with lib/media-hosts.ts. When adding a new
+// CDN host, edit both copies (this file and the shared module). Dots are
+// escaped so lookalike hosts (e.g. `evil.hicineXsbs`) cannot match.
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const MEDIA_HOST_RE = new RegExp(
   "(^|\\.)(" +
-    ["vcloud.fit", "workers.dev", "googleusercontent.com", "r2.dev", "hicine.sbs"].join("|") +
-    ")$", "i");
+    [
+      "vcloud.fit",
+      "workers.dev",
+      "googleusercontent.com",
+      "r2.dev",
+      "hicine.sbs",
+    ]
+      .map(escapeRegExp)
+      .join("|") +
+    ")$",
+  "i"
+)
 
 function safeUrl(u) {
   try {
@@ -117,7 +133,9 @@ async function probe(url, select = "s") {
     select,
     url,
   ]
-  const stdout = await execFileFile(FFPROBE, args, { timeout: PROBE_TIMEOUT_MS })
+  const stdout = await execFileFile(FFPROBE, args, {
+    timeout: PROBE_TIMEOUT_MS,
+  })
   const parsed = JSON.parse(stdout)
   return (parsed.streams || []).map((s) => ({
     index: s.index,
@@ -213,13 +231,15 @@ async function extract(url, index, res, key) {
   fs.createReadStream(cached).pipe(res)
 }
 
-
 // Full link-resolution from the residential network: upstream hosts block
 // datacenter egress, so this box is the only place the whole chain works.
 async function resolveChain(workerBase, vcloudUrl) {
   const linksRes = await fetch(
     `${workerBase}/api/links?vcloud=${encodeURIComponent(vcloudUrl)}`,
-    { headers: { "user-agent": BROWSER_UA }, signal: AbortSignal.timeout(15000) }
+    {
+      headers: { "user-agent": BROWSER_UA },
+      signal: AbortSignal.timeout(15000),
+    }
   )
   if (!linksRes.ok) throw new Error(`links ${linksRes.status}`)
   const data = await linksRes.json()
@@ -236,7 +256,9 @@ async function resolveChain(workerBase, vcloudUrl) {
         headers: { "user-agent": BROWSER_UA },
         signal: AbortSignal.timeout(20000),
       })
-      try { await r.body?.cancel() } catch {}
+      try {
+        await r.body?.cancel()
+      } catch {}
       if (r.status >= 300 && r.status < 400) {
         const next = r.headers.get("location")
         if (!next) throw new Error("no location")
@@ -274,7 +296,9 @@ async function resolveChain(workerBase, vcloudUrl) {
         headers: { "user-agent": BROWSER_UA, range: "bytes=0-1023" },
         signal: AbortSignal.timeout(15000),
       })
-      try { await g.body?.cancel() } catch {}
+      try {
+        await g.body?.cancel()
+      } catch {}
       ok =
         (g.status === 200 || g.status === 206) &&
         !/^text\/html/i.test(g.headers.get("content-type") ?? "")
@@ -292,7 +316,6 @@ async function resolveChain(workerBase, vcloudUrl) {
     size: data.size,
   }
 }
-
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, "http://x")
@@ -355,7 +378,6 @@ const server = http.createServer(async (req, res) => {
       return await extract(url, index, res, key.slice(0, 300))
     }
 
-
     if (pathname === "/extract-stream") {
       const index = Number.parseInt(u.searchParams.get("index") || "", 10)
       if (!Number.isInteger(index) || index < 0)
@@ -382,12 +404,18 @@ const server = http.createServer(async (req, res) => {
         FFMPEG,
         [
           "-nostdin",
-          "-user_agent", BROWSER_UA,
-          "-i", url,
-          "-map", `0:${index}`,
-          "-flush_packets", "1",
-          "-f", "webvtt",
-          "-y", tmp,
+          "-user_agent",
+          BROWSER_UA,
+          "-i",
+          url,
+          "-map",
+          `0:${index}`,
+          "-flush_packets",
+          "1",
+          "-f",
+          "webvtt",
+          "-y",
+          tmp,
         ],
         { stdio: ["ignore", "ignore", "pipe"] }
       )
@@ -401,11 +429,17 @@ const server = http.createServer(async (req, res) => {
         if (finished) return
         finished = true
         clearInterval(poll)
-        try { res.end(); } catch {}
+        try {
+          res.end()
+        } catch {}
         if (code === 0 && sent > 0) {
-          try { fs.renameSync(tmp, cachePath(key, url, index)); } catch {}
+          try {
+            fs.renameSync(tmp, cachePath(key, url, index))
+          } catch {}
         } else {
-          try { fs.unlinkSync(tmp); } catch {}
+          try {
+            fs.unlinkSync(tmp)
+          } catch {}
         }
         console.log(`[extract-stream] exited code=${code} sent=${sent}B`)
       }
@@ -434,7 +468,9 @@ const server = http.createServer(async (req, res) => {
         finished = true
         clearInterval(poll)
         child.kill("SIGKILL")
-        try { fs.unlinkSync(tmp); } catch {}
+        try {
+          fs.unlinkSync(tmp)
+        } catch {}
       })
       return
     }

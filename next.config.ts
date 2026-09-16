@@ -4,6 +4,11 @@ import { withNextVideo } from "next-video/process"
 // Research‑grade security headers. CSP is relaxed for script/style so Next's
 // required inline bootstrap/font scripts keep working; everything else that
 // should be restricted is.
+// `unsafe-eval` is dev-only: React's development build uses eval for enhanced
+// debugging (server error stack reconstruction); neither React nor Next use
+// eval in production, so production keeps a strict CSP.
+const isDev = process.env.NODE_ENV !== "production"
+
 const SECURITY_HEADERS = [
   {
     key: "Content-Security-Policy",
@@ -18,7 +23,7 @@ const SECURITY_HEADERS = [
       "frame-ancestors 'none'",
       "form-action 'self'",
       "manifest-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
       "worker-src 'self' blob:",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https: http:",
@@ -51,6 +56,13 @@ const SECURITY_HEADERS = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   images: {
+    // Dev-only: the optimizer's upstream fetch has a hardcoded 7s timeout
+    // (next/dist/esm/server/image-optimizer.js) and a page of posters fires
+    // dozens of parallel fetches at storage.hicine.sbs, which throttles
+    // concurrent connections past that timeout — every poster 500s in dev.
+    // Serve the CDN's original webp in dev; production keeps optimization
+    // (its responses are cached at the edge by the images-cache patch).
+    unoptimized: isDev,
     remotePatterns: [
       { protocol: "https", hostname: "storage.hicine.sbs" },
       { protocol: "https", hostname: "**.hicine.sbs" },

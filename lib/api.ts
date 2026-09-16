@@ -1,6 +1,39 @@
 const BASE_URL = "https://api.hicine.sbs"
 
-export type ContentType = "movies" | "anime" | "series"
+export type ContentType =
+  "movies" | "anime" | "series" | "bolly_movies" | "bolly_series"
+
+export const CONTENT_TYPES: ContentType[] = [
+  "movies",
+  "anime",
+  "series",
+  "bolly_movies",
+  "bolly_series",
+]
+
+/**
+ * Runtime-narrow an arbitrary string (e.g. a `[type]` route param or
+ * `?type=` query value) to a known ContentType, or null. Returns explicit
+ * string literals so static taint analysis can prove the result is
+ * allow-listed (an imported `CONTENT_TYPES.includes(...)` guard is opaque to
+ * it, which let the raw param reach upstream request URLs).
+ */
+export function toContentType(value: string): ContentType | null {
+  switch (value) {
+    case "movies":
+      return "movies"
+    case "anime":
+      return "anime"
+    case "series":
+      return "series"
+    case "bolly_movies":
+      return "bolly_movies"
+    case "bolly_series":
+      return "bolly_series"
+    default:
+      return null
+  }
+}
 
 // Raw API types
 export interface MediaItem {
@@ -18,6 +51,9 @@ export interface MediaItem {
   modified_date: string
   excerpt: string | null
   cloudlinks: string | null
+  // Authoritative catalog from the API (trending/search/recent); absent on
+  // the per-catalog list endpoints.
+  contentType?: string
   // seasons only for anime/series (up to 15 + zip)
   season_1?: string | null
   season_2?: string | null
@@ -82,8 +118,10 @@ export function getCategories(item: MediaItem): string[] {
 }
 
 /**
- * Remap category labels for display. The API sometimes tags anime as
- * "Hollywood Series" which is factually wrong — this corrects it.
+ * Remap category labels for display. The API sometimes tags genuine anime as
+ * "Hollywood Series"; correct that only when the item really is anime (via
+ * getContentType, which trusts the API's contentType field), so hollywood
+ * anime-dubbed titles keep their own labels.
  */
 const CATEGORY_REMAP: Record<string, string> = {
   "Hollywood Series": "Anime Series",
@@ -91,9 +129,10 @@ const CATEGORY_REMAP: Record<string, string> = {
 
 export function getDisplayCategories(item: MediaItem): string[] {
   const cats = getCategories(item)
-  const isAnime = /\banime\b/i.test(item.categories ?? "")
-  if (!isAnime) return cats
-  return cats.map((c) => CATEGORY_REMAP[c] ?? c)
+  if (getContentType(item) !== "anime") return cats
+  // Dedupe: anime items often carry "Anime Series" alongside the remapped
+  // "Hollywood Series", which would otherwise show the label twice.
+  return [...new Set(cats.map((c) => CATEGORY_REMAP[c] ?? c))]
 }
 
 export function getYear(item: MediaItem): string | null {
@@ -207,7 +246,7 @@ export function getSeasons(item: MediaItem): ParsedSeason[] {
   return seasons
 }
 
-async function fetchApi(
+export async function fetchApi(
   type: ContentType,
   page: number,
   limit: number
@@ -229,77 +268,22 @@ export function fetchAnime(page = 1, limit = 20) {
 export function fetchSeries(page = 1, limit = 20) {
   return fetchApi("series", page, limit)
 }
-
-export async function fetchBySlug(
-  slug: string
-): Promise<{ item: MediaItem; type: ContentType } | null> {
-  // API has no direct slug endpoint — search via paginated fetch with large limit is not ideal
-  // Instead try each type by fetching with search — fallback to scanning first pages
-  // We use a parallel fetch of all types page 1 with limit 100 and look for slug match
-  // For production, better to add a dedicated /api/<type>/<slug> if available — try it first
-  for (const type of ["movies", "anime", "series"] as ContentType[]) {
-    try {
-      const res = await fetch(`${BASE_URL}/api/${type}/${slug}`, {
-        next: { revalidate: 300 },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        // API may return { data: item } or { data: [item] }
-        const item: MediaItem | undefined = Array.isArray(data.data)
-          ? data.data[0]
-          : (data.data ?? data)
-        if (item && item.url_slug === slug) return { item, type }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // fallback: search by fetching pages (limited to first 3 pages x 100)
-  for (const type of ["movies", "anime", "series"] as ContentType[]) {
-    for (let page = 1; page <= 3; page++) {
-      try {
-        const res = await fetchApi(type, page, 100)
-        const found = res.data.find((d) => d.url_slug === slug)
-        if (found) return { item: found, type }
-        if (res.data.length < 100) break
-      } catch {
-        break
-      }
-    }
-  }
-
-  // last resort: fresh entries often appear in /api/trending before the
-  // per-type indexes and slug endpoints know about them
-  try {
-    const res = await fetch(`${BASE_URL}/api/trending?page=1&limit=50`, {
-      next: { revalidate: 300 },
-    })
-    if (res.ok) {
-      const data: unknown = await res.json()
-      const list: MediaItem[] = Array.isArray(data) ? (data as MediaItem[]) : []
-      const found = list.find((d) => d && d.url_slug === slug)
-      if (found) {
-        const cats = (found.categories || "").toLowerCase()
-        if (/\banime\b/.test(cats)) return { item: found, type: "anime" }
-        const hasSeasons = Array.from({ length: 15 }).some((_, i) =>
-          Boolean(found[`season_${i + 1}`])
-        )
-        return { item: found, type: hasSeasons ? "series" : "movies" }
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return null
+export function fetchBollyMovies(page = 1, limit = 20) {
+  return fetchApi("bolly_movies", page, limit)
+}
+export function fetchBollySeries(page = 1, limit = 20) {
+  return fetchApi("bolly_series", page, limit)
 }
 
-// /api/trending returns a bare array of items instead of { data }.
-export async function fetchTrending(limit = 12): Promise<MediaItem[]> {
+// /api/trending and /api/recent return a bare array instead of { data }.
+async function fetchBareList(
+  path: "trending" | "recent",
+  limit: number,
+  revalidateSeconds: number
+): Promise<MediaItem[]> {
   try {
-    const res = await fetch(`${BASE_URL}/api/trending?page=1&limit=${limit}`, {
-      next: { revalidate: 600 },
+    const res = await fetch(`${BASE_URL}/api/${path}?page=1&limit=${limit}`, {
+      next: { revalidate: revalidateSeconds },
     })
     if (!res.ok) return []
     const data: unknown = await res.json()
@@ -314,6 +298,14 @@ export async function fetchTrending(limit = 12): Promise<MediaItem[]> {
   } catch {
     return []
   }
+}
+
+export function fetchTrending(limit = 12): Promise<MediaItem[]> {
+  return fetchBareList("trending", limit, 600)
+}
+
+export function fetchRecent(limit = 12): Promise<MediaItem[]> {
+  return fetchBareList("recent", limit, 300)
 }
 
 export async function searchContent(q: string): Promise<MediaItem[]> {
@@ -331,6 +323,62 @@ export async function searchContent(q: string): Promise<MediaItem[]> {
   return arr.filter((d): d is MediaItem =>
     Boolean(d && (d as MediaItem).url_slug)
   )
+}
+
+export async function fetchBySlug(
+  slug: string
+): Promise<{ item: MediaItem; type: ContentType } | null> {
+  // Probe every catalog's dedicated /api/<type>/<slug> endpoint. All 5
+  // probes run in parallel — a Bollywood title (bolly_movies/bolly_series)
+  // previously fell through these three and 404'd on its watch page.
+  const probes = await Promise.all(
+    CONTENT_TYPES.map(async (type) => {
+      try {
+        const res = await fetch(`${BASE_URL}/api/${type}/${slug}`, {
+          next: { revalidate: 300 },
+        })
+        if (!res.ok) return null
+        const data = await res.json()
+        // API may return { data: item } or { data: [item] }
+        const item: MediaItem | undefined = Array.isArray(data.data)
+          ? data.data[0]
+          : (data.data ?? data)
+        if (item && item.url_slug === slug) return { item, type }
+      } catch {
+        // ignore
+      }
+      return null
+    })
+  )
+  for (const found of probes) {
+    if (found) return found
+  }
+
+  // fallback: search by fetching pages (limited to first 3 pages x 100)
+  for (const type of CONTENT_TYPES) {
+    for (let page = 1; page <= 3; page++) {
+      try {
+        const res = await fetchApi(type, page, 100)
+        const found = res.data.find((d) => d.url_slug === slug)
+        if (found) return { item: found, type }
+        if (res.data.length < 100) break
+      } catch {
+        break
+      }
+    }
+  }
+
+  // last resort: fresh entries often appear in /api/trending before the
+  // per-type indexes and slug endpoints know about them
+  try {
+    const list = await fetchTrending(50)
+    const found = list.find((d) => d.url_slug === slug)
+    if (found) return { item: found, type: getContentType(found) }
+  } catch {
+    // ignore
+  }
+
+  return null
 }
 
 /**
@@ -353,15 +401,63 @@ export async function fetchRelated(
 }
 
 export function getContentTypeLabel(type: ContentType): string {
-  return type === "movies" ? "Movies" : type === "anime" ? "Anime" : "Series"
+  switch (type) {
+    case "movies":
+      return "Movies"
+    case "anime":
+      return "Anime"
+    case "series":
+      return "Series"
+    case "bolly_movies":
+      return "Bollywood Movies"
+    case "bolly_series":
+      return "Bollywood Series"
+  }
 }
 
-/** Infer content type from a bare MediaItem (e.g. from trending). */
+/** Map a ContentType to the front-end listing route path. */
+export function getTypeRoute(type: ContentType): string {
+  switch (type) {
+    case "movies":
+      return "/movies"
+    case "anime":
+      return "/anime"
+    case "series":
+      return "/series"
+    case "bolly_movies":
+      return "/bolly-movies"
+    case "bolly_series":
+      return "/bolly-series"
+  }
+}
+
+function hasSeasonFields(item: MediaItem): boolean {
+  for (let i = 1; i <= 15; i++) {
+    if (item[`season_${i}` as keyof MediaItem]) return true
+  }
+  return false
+}
+
+function inferContentType(item: MediaItem): ContentType {
+  const c = (item.categories ?? "").toLowerCase()
+  if (c.includes("bollywood series")) return "bolly_series"
+  if (c.includes("bollywood")) return "bolly_movies"
+  // Genuine anime series: both "Anime Series" + season fields. Anime films
+  // (in the movies catalog) lack seasons and stay "movies".
+  if (c.includes("anime series") && hasSeasonFields(item)) return "anime"
+  if (c.includes("hollywood series") || hasSeasonFields(item)) return "series"
+  return "movies"
+}
+
+/**
+ * Resolve the best content type for a MediaItem. Trusts the API's
+ * `contentType` field when present (authoritative for trending/search/recent)
+ * and falls back to category + season inference for list-endpoint items.
+ */
 export function getContentType(item: MediaItem): ContentType {
-  const cats = (item.categories || "").toLowerCase()
-  if (/\banime\b/.test(cats)) return "anime"
-  const hasSeasons = Array.from({ length: 15 }).some((_, i) =>
-    Boolean(item[`season_${i + 1}`])
-  )
-  return hasSeasons ? "series" : "movies"
+  const t = item.contentType
+  if (t && (CONTENT_TYPES as readonly string[]).includes(t)) {
+    return t as ContentType
+  }
+  return inferContentType(item)
 }

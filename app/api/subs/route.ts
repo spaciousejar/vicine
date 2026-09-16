@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { MEDIA_HOST_RE } from "@/lib/media-hosts"
 
 // Proxy to the subtitle/audio sidecar (SUBS_SIDECAR_URL, e.g. a home box
 // running sidecar/subs-server.mjs behind a tunnel). Proxying keeps the
@@ -8,22 +9,6 @@ export const maxDuration = 300 // subtitle extraction reads the whole remote fil
 
 const SIDECAR = process.env.SUBS_SIDECAR_URL?.replace(/\/+$/, "")
 const TIMEOUT_MS = 290_000
-
-// Media hosts we resolve to / stream from. Anything else is rejected so
-// the proxy endpoints cannot be used as an SSRF primitive into private
-// networks. Extend as new CDNs appear in resolved links.
-const MEDIA_HOST_RE = new RegExp(
-  "(^|\\.)(" +
-    [
-      "vcloud.fit",
-      "workers.dev",
-      "googleusercontent.com",
-      "r2.dev",
-      "hicine.sbs",
-    ].join("|") +
-    ")$",
-  "i"
-)
 
 function isAllowedTarget(raw: string): boolean {
   try {

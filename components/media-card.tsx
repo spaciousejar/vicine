@@ -4,22 +4,31 @@ import { Play } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import type { ContentType, MediaItem } from "@/lib/api"
-import { getDisplayCategories, getImage, getYear } from "@/lib/api"
+import {
+  getContentType,
+  getDisplayCategories,
+  getImage,
+  getYear,
+} from "@/lib/api"
 
 export function MediaCard({
   item,
   type,
 }: {
   item: MediaItem
-  type: ContentType
+  type?: ContentType
 }) {
   const img = getImage(item)
   const cats = getDisplayCategories(item)
   const year = getYear(item)
   const topCats = cats.slice(0, 2)
+  const resolvedType = type ?? getContentType(item)
 
   return (
-    <Link href={`/watch/${type}/${item.url_slug}`} className="group block">
+    <Link
+      href={`/watch/${resolvedType}/${item.url_slug}`}
+      className="group block"
+    >
       <Card className="overflow-hidden border-0 bg-card py-0 shadow-sm ring-1 ring-foreground/5 transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-lg group-hover:ring-primary/20">
         <div className="relative aspect-[2/3] overflow-hidden bg-muted">
           {img ? (

@@ -11,9 +11,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
+  getContentTypeLabel,
   getDisplayCategories,
   getImage,
   getSeasons,
+  getTypeRoute,
   getYear,
   parseMovieLinks,
 } from "@/lib/api"
@@ -48,7 +50,9 @@ export function WatchInnerClient({
   const cats = getDisplayCategories(item)
   const year = getYear(item)
   const seasons = getSeasons(item)
-  const movieLinks = type === "movies" ? parseMovieLinks(item.links) : []
+  // Bollywood movies use the same flat link list as Hollywood movies.
+  const isMovie = type === "movies" || type === "bolly_movies"
+  const movieLinks = isMovie ? parseMovieLinks(item.links) : []
 
   // Rank sources by resolution first (1080p > 720p > 480p), then prefer the
   // smallest file at that resolution (faster start, same fidelity).
@@ -118,7 +122,7 @@ export function WatchInnerClient({
   // Every playable source for this title — used by the in-player quality
   // menu for movies, and as the lookup for labels when episodes switch.
   const allVariants = (
-    type === "movies"
+    isMovie
       ? movieLinks.map((l) => ({
           url: l.url,
           label: `${l.label}${l.size ? ` [${l.size}]` : ""}`,
@@ -222,7 +226,7 @@ export function WatchInnerClient({
 
   // When the current episode ends, show "Up next" and auto-play the next one.
   function handleEnded() {
-    if (type === "movies") return
+    if (isMovie) return
     const idx = episodeOrder.findIndex((x) =>
       x.links.some((l) => l.url === url)
     )
@@ -245,10 +249,10 @@ export function WatchInnerClient({
       <main className="mx-auto max-w-7xl px-safe py-4 pb-safe sm:py-6">
         <div className="mb-3 flex flex-wrap items-center gap-x-2 text-xs sm:mb-4">
           <Link
-            href={`/${type}`}
+            href={getTypeRoute(type)}
             className="-ml-1 inline-flex min-h-9 items-center rounded-md px-1 text-muted-foreground transition-colors hover:text-foreground"
           >
-            ← Back to {type}
+            &larr; Back to {getContentTypeLabel(type)}
           </Link>
           <span className="min-w-0 font-medium">{item.title}</span>
         </div>
@@ -257,16 +261,14 @@ export function WatchInnerClient({
             player → title/meta → episodes, so you can see what you're watching
             without scrolling past the whole episode list. On lg the info card
             moves into the right column and spans both rows. */}
-        <div className="grid gap-6 lg:grid-cols-[1.6fr_0.9fr] lg:items-start">
-          <div className="space-y-4 lg:col-start-1 lg:row-start-1">
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[1.6fr_0.9fr] lg:items-start">
+          <div className="min-w-0 space-y-4 lg:col-start-1 lg:row-start-1">
             <div className="relative">
               <VideoPlayer
                 url={url}
                 label={label}
                 poster={img}
-                variants={
-                  type === "movies" ? allVariants : (episodeVariants ?? [])
-                }
+                variants={isMovie ? allVariants : (episodeVariants ?? [])}
                 onUrlChange={(u) => {
                   setUrl(u)
                   const variant = allVariants.find((v) => v.url === u)
@@ -316,7 +318,7 @@ export function WatchInnerClient({
             </div>
           </div>
 
-          <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+          <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
             <Card className="overflow-hidden py-0">
               {/* A 2:3 poster at full width is a ~500px-tall wall on a phone,
                   so crop to a banner until the card is in its own column. */}
@@ -326,6 +328,7 @@ export function WatchInnerClient({
                     src={img}
                     alt={item.title}
                     fill
+                    priority
                     sizes="(max-width: 1024px) 100vw, 33vw"
                     className="object-cover"
                   />
@@ -361,8 +364,8 @@ export function WatchInnerClient({
             </Card>
           </div>
 
-          <div className="lg:col-start-1 lg:row-start-2">
-            {type === "movies" ? (
+          <div className="min-w-0 lg:col-start-1 lg:row-start-2">
+            {isMovie ? (
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">
@@ -475,7 +478,7 @@ export function WatchInnerClient({
                 You might also like
               </h2>
               <Link
-                href={`/${type}`}
+                href={getTypeRoute(type)}
                 data-slot="button"
                 className="text-sm text-muted-foreground transition-colors hover:text-foreground"
               >

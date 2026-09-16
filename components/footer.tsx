@@ -53,6 +53,22 @@ export function Footer() {
                   Series
                 </Link>
               </li>
+              <li>
+                <Link
+                  href="/bolly-movies"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Bollywood Movies
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/bolly-series"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Bollywood Series
+                </Link>
+              </li>
             </ul>
           </div>
 

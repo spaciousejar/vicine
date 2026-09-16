@@ -177,7 +177,7 @@ export function VideoPlayer({
   }, [])
 
   return (
-    <Player poster={poster}>
+    <Player>
       <Container
         className={`media-default-skin media-default-skin--video ${className ?? ""}`}
         style={style}
@@ -212,7 +212,7 @@ export function VideoPlayer({
           }}
         />
 
-        <Poster render={renderPoster} />
+        <Poster />
 
         <BufferingIndicator
           render={(props) => (
