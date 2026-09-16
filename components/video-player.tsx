@@ -34,7 +34,6 @@ const SHOULD_USE_TRANSMUX_PROXY =
 const NATIVE_AUDIO_CODECS = new Set([
   "aac",
   "mp3",
-  "mp2",
   "opus",
   "vorbis",
   "flac",
@@ -834,8 +833,12 @@ export function VideoPlayer({
           title?: string
           codec?: string
         }[] = data?.audioTracks ?? []
-        const firstCodec = String(audioTracks[0]?.codec ?? "").toLowerCase()
-        const firstNonNative = !NATIVE_AUDIO_CODECS.has(firstCodec)
+        const firstTrack = audioTracks[0]
+        const firstCodec = String(firstTrack?.codec ?? "").toLowerCase()
+        // No track at all is not "non-native" — guard so the auto-switch below
+        // never dereferences an absent audioTracks[0].
+        const firstNonNative =
+          firstTrack !== undefined && !NATIVE_AUDIO_CODECS.has(firstCodec)
 
         // Show the audio menu when there is more than one track (as before)
         // or when the single default track needs the remux to be audible.
@@ -857,8 +860,8 @@ export function VideoPlayer({
         // The browser plays the file's first audio stream; when it cannot
         // decode it the movie is silently muted, so auto-switch to the AAC
         // remux of that track instead of leaving playback dead.
-        if (firstNonNative) {
-          setActiveAudioId(String(audioTracks[0].index))
+        if (firstNonNative && firstTrack) {
+          setActiveAudioId(String(firstTrack.index))
         }
       })
       .catch(() => {})

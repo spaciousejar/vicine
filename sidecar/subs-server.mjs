@@ -70,7 +70,9 @@ function fail(res, status, message) {
 }
 
 // SSRF allowlist — kept in sync with lib/media-hosts.ts. When adding a new
-// CDN host, edit both copies (this file and the shared module).
+// CDN host, edit both copies (this file and the shared module). Dots are
+// escaped so lookalike hosts (e.g. `evil.hicineXsbs`) cannot match.
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const MEDIA_HOST_RE = new RegExp(
   "(^|\\.)(" +
     [
@@ -79,7 +81,9 @@ const MEDIA_HOST_RE = new RegExp(
       "googleusercontent.com",
       "r2.dev",
       "hicine.sbs",
-    ].join("|") +
+    ]
+      .map(escapeRegExp)
+      .join("|") +
     ")$",
   "i"
 )

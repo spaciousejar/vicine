@@ -1,5 +1,5 @@
 import { ListingShell } from "@/components/listing-page"
-import { fetchMovies, searchContent } from "@/lib/api"
+import { fetchMovies, getContentType, searchContent } from "@/lib/api"
 
 // ISR: cache the rendered page (backed by the R2 incremental cache) and
 // regenerate it every 5 minutes instead of re-rendering + re-fetching on
@@ -15,7 +15,11 @@ export default async function MoviesPage({
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1)
   const q = sp.q ?? ""
   const res = await fetchMovies(page, 24)
-  const items = q ? await searchContent(q) : res.data
+  const items = q
+    ? (await searchContent(q)).filter(
+        (item) => getContentType(item) === "movies"
+      )
+    : res.data
   return (
     <ListingShell
       title="Movies"
