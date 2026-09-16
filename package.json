@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "bun run build:worker",
+    "build:next": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "bun test",
