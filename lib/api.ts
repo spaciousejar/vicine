@@ -13,23 +13,13 @@ export const CONTENT_TYPES: ContentType[] = [
 
 /**
  * Runtime-narrow an arbitrary string (e.g. a `[type]` route param) to a known
- * ContentType, or null. Unlike `CONTENT_TYPES.includes(value)` — which static
- * taint analysis cannot see through, so a route param stayed "tainted" all the
- * way into the upstream fetch URL (CodeQL js/request-forgery) — the explicit
- * string literals here let analysis prove the value is constrained to the
- * allow-list before it is ever interpolated into a request.
+ * ContentType, or null. Keeps the cast in one place so callers can reject
+ * unknown catalog segments before doing any work.
  */
 export function toContentType(value: string): ContentType | null {
-  switch (value) {
-    case "movies":
-    case "anime":
-    case "series":
-    case "bolly_movies":
-    case "bolly_series":
-      return value
-    default:
-      return null
-  }
+  return CONTENT_TYPES.includes(value as ContentType)
+    ? (value as ContentType)
+    : null
 }
 
 // Raw API types
