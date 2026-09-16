@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { fetchApi, searchContent, CONTENT_TYPES } from "@/lib/api"
+import { fetchApi, searchContent, toContentType } from "@/lib/api"
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams
-  const type = sp.get("type") || "movies"
+  const type = toContentType(sp.get("type") || "movies")
   const page = Math.max(1, parseInt(sp.get("page") || "1", 10) || 1)
   const limit = Math.min(
     60,
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   )
   const q = sp.get("q") || ""
 
-  if (!CONTENT_TYPES.includes(type as (typeof CONTENT_TYPES)[number])) {
+  if (!type) {
     return NextResponse.json({ error: "Unknown type" }, { status: 400 })
   }
 
@@ -24,11 +24,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const res = await fetchApi(
-      type as (typeof CONTENT_TYPES)[number],
-      page,
-      limit
-    )
+    const res = await fetchApi(type, page, limit)
     return NextResponse.json(res)
   } catch {
     return NextResponse.json(

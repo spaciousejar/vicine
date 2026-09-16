@@ -12,14 +12,27 @@ export const CONTENT_TYPES: ContentType[] = [
 ]
 
 /**
- * Runtime-narrow an arbitrary string (e.g. a `[type]` route param) to a known
- * ContentType, or null. Keeps the cast in one place so callers can reject
- * unknown catalog segments before doing any work.
+ * Runtime-narrow an arbitrary string (e.g. a `[type]` route param or
+ * `?type=` query value) to a known ContentType, or null. Returns explicit
+ * string literals so static taint analysis can prove the result is
+ * allow-listed (an imported `CONTENT_TYPES.includes(...)` guard is opaque to
+ * it, which let the raw param reach upstream request URLs).
  */
 export function toContentType(value: string): ContentType | null {
-  return CONTENT_TYPES.includes(value as ContentType)
-    ? (value as ContentType)
-    : null
+  switch (value) {
+    case "movies":
+      return "movies"
+    case "anime":
+      return "anime"
+    case "series":
+      return "series"
+    case "bolly_movies":
+      return "bolly_movies"
+    case "bolly_series":
+      return "bolly_series"
+    default:
+      return null
+  }
 }
 
 // Raw API types
